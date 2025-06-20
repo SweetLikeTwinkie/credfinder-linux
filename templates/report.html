@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>credfinder-linux Report</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 2.5em;
+            font-weight: 300;
+        }
+        .header p {
+            margin: 10px 0 0 0;
+            opacity: 0.9;
+        }
+        .content {
+            padding: 30px;
+        }
+        .summary {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+        .summary h2 {
+            margin-top: 0;
+            color: #333;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .stat-card {
+            background: white;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            transition: transform 0.2s;
+        }
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .stat-number {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #667eea;
+        }
+        .stat-label {
+            color: #6c757d;
+            margin-top: 5px;
+            font-weight: 500;
+        }
+        .module {
+            margin-bottom: 30px;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .module-header {
+            background: #6c757d;
+            color: white;
+            padding: 15px 20px;
+            cursor: pointer;
+            user-select: none;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background-color 0.2s;
+        }
+        .module-header:hover {
+            background: #5a6268;
+        }
+        .module-header h3 {
+            margin: 0;
+        }
+        .module-count {
+            background: rgba(255,255,255,0.2);
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.9em;
+        }
+        .module-content {
+            padding: 20px;
+            display: none;
+        }
+        .module-content.active {
+            display: block;
+        }
+        .finding {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 15px;
+            transition: all 0.2s;
+        }
+        .finding:hover {
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .finding.critical {
+            background: #f8d7da;
+            border-color: #f5c6cb;
+        }
+        .finding.warning {
+            background: #fff3cd;
+            border-color: #ffeaa7;
+        }
+        .finding.info {
+            background: #d1ecf1;
+            border-color: #bee5eb;
+        }
+        .finding.success {
+            background: #d4edda;
+            border-color: #c3e6cb;
+        }
+        .finding h4 {
+            margin-top: 0;
+            color: #856404;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .finding.critical h4 {
+            color: #721c24;
+        }
+        .finding.info h4 {
+            color: #0c5460;
+        }
+        .finding.success h4 {
+            color: #155724;
+        }
+        .finding-type {
+            font-size: 0.8em;
+            padding: 4px 8px;
+            border-radius: 12px;
+            background: rgba(0,0,0,0.1);
+        }
+        .finding-details {
+            margin-top: 15px;
+        }
+        .detail-row {
+            display: flex;
+            margin-bottom: 8px;
+            align-items: center;
+        }
+        .detail-label {
+            font-weight: 600;
+            min-width: 120px;
+            color: #495057;
+        }
+        .detail-value {
+            flex: 1;
+            word-break: break-all;
+        }
+        .code {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            overflow-x: auto;
+            margin-top: 10px;
+        }
+        .timestamp {
+            color: #6c757d;
+            font-size: 0.9em;
+            margin-top: 10px;
+        }
+        .no-findings {
+            text-align: center;
+            color: #6c757d;
+            font-style: italic;
+            padding: 40px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        .severity-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .severity-critical { background-color: #dc3545; }
+        .severity-warning { background-color: #ffc107; }
+        .severity-info { background-color: #17a2b8; }
+        .severity-success { background-color: #28a745; }
+        .breadcrumb {
+            background: #e9ecef;
+            padding: 10px 20px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            font-size: 0.9em;
+            color: #6c757d;
+        }
+        .export-buttons {
+            text-align: right;
+            margin-bottom: 20px;
+        }
+        .export-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-left: 10px;
+            font-size: 0.9em;
+        }
+        .export-btn:hover {
+            background: #5a67d8;
+        }
+        .ssh-key-info {
+            background: #f8f9fa;
+            border-radius: 6px;
+            padding: 12px;
+            margin-top: 10px;
+            border-left: 4px solid #667eea;
+        }
+        .ssh-private-key {
+            border-left-color: #dc3545;
+        }
+        .ssh-public-key {
+            border-left-color: #28a745;
+        }
+        .ssh-agent {
+            border-left-color: #ffc107;
+        }
+        .risk-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.75em;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .risk-high {
+            background: #dc3545;
+            color: white;
+        }
+        .risk-medium {
+            background: #ffc107;
+            color: #212529;
+        }
+        .risk-low {
+            background: #28a745;
+            color: white;
+        }
+        .ssh-icon {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            margin-right: 8px;
+            background-size: contain;
+            background-repeat: no-repeat;
+        }
+        .icon-private-key::before { content: "🔑"; }
+        .icon-public-key::before { content: "🔓"; }
+        .icon-agent::before { content: "🖥️"; }
+        .icon-config::before { content: "⚙️"; }
+        .icon-known-hosts::before { content: "🌐"; }
+        .icon-browser-credential::before { content: "🌐"; }
+        .icon-keyring-entry::before { content: "🔐"; }
+        .icon-memory-secret::before { content: "🧠"; }
+        .icon-dotfile-credential::before { content: "📄"; }
+        .icon-dotfile-config::before { content: "⚙️"; }
+        .icon-dotfile-sensitive::before { content: "⚠️"; }
+        
+        .module-browser { border-left-color: #007bff; }
+        .module-keyring { border-left-color: #6f42c1; }
+        .module-memory { border-left-color: #fd7e14; }
+        .module-dotfiles { border-left-color: #20c997; }
+        .module-history { border-left-color: #6c757d; }
+        
+        .browser-info {
+            background: #e3f2fd;
+            border-left: 4px solid #007bff;
+        }
+        .keyring-info {
+            background: #f3e5f5;
+            border-left: 4px solid #6f42c1;
+        }
+        .memory-info {
+            background: #fff3e0;
+            border-left: 4px solid #fd7e14;
+        }
+        .dotfile-info {
+            background: #e0f2f1;
+            border-left: 4px solid #20c997;
+        }
+        .history-info {
+            background: #f5f5f5;
+            border-left: 4px solid #6c757d;
+        }
+        .explanation-box {
+            background: #e8f4fd;
+            border: 1px solid #bee5eb;
+            border-radius: 6px;
+            padding: 15px;
+            margin-top: 15px;
+            font-size: 0.9em;
+        }
+        .explanation-title {
+            font-weight: 600;
+            color: #0c5460;
+            margin-bottom: 8px;
+        }
+        .explanation-content {
+            color: #495057;
+            line-height: 1.5;
+        }
+        .recommendation-box {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 6px;
+            padding: 15px;
+            margin-top: 10px;
+            font-size: 0.9em;
+        }
+        .recommendation-title {
+            font-weight: 600;
+            color: #856404;
+            margin-bottom: 8px;
+        }
+        .recommendation-content {
+            color: #495057;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>credfinder-linux</h1>
+            <p>Linux Credential & Secret Hunting Report</p>
+            <div class="timestamp">Generated on: {{ timestamp }}</div>
+        </div>
+        
+        <div class="content">
+            <div class="breadcrumb">
+                <strong>Scan Summary:</strong> {{ modules_run }} modules executed | {{ total_findings }} total findings
+            </div>
+            
+            <div class="export-buttons">
+                <button class="export-btn" onclick="window.print()">Print Report</button>
+                <button class="export-btn" onclick="exportToJSON()">Export JSON</button>
+            </div>
+            
+            <div class="summary">
+                <h2>Executive Summary</h2>
+                <div class="stats">
+                    <div class="stat-card">
+                        <div class="stat-number">{{ total_findings }}</div>
+                        <div class="stat-label">Total Findings</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">{{ critical_findings }}</div>
+                        <div class="stat-label">Critical Issues</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">{{ warning_findings }}</div>
+                        <div class="stat-label">Warnings</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">{{ modules_run }}</div>
+                        <div class="stat-label">Modules Executed</div>
+                    </div>
+                </div>
+                
+                <div class="explanation-box" style="margin-top: 20px;">
+                    <div class="explanation-title">Module Overview - Attack Vectors</div>
+                    <div class="explanation-content">
+                        <strong>SSH Module:</strong> Extracts SSH keys for lateral movement, identifies targets from known_hosts, and reveals SSH infrastructure.<br>
+                        <strong>Browser Module:</strong> Dumps saved credentials for web application access, email systems, and cloud services.<br>
+                        <strong>Keyring Module:</strong> Extracts application passwords, database credentials, and API keys stored by the system.<br>
+                        <strong>Memory Module:</strong> Finds active secrets in process memory for immediate use in authentication and API calls.<br>
+                        <strong>Dotfiles Module:</strong> Discovers hardcoded credentials, API keys, and connection strings in configuration files.<br>
+                        <strong>History Module:</strong> Reveals command patterns, credentials in commands, and system usage for privilege escalation.
+                    </div>
+                </div>
+            </div>
+
+            {% for module_name, module_data in results.items() %}
+            <div class="module">
+                <div class="module-header" onclick="toggleModule('{{ module_name }}')">
+                    <h3>{{ module_name|title }} Module</h3>
+                    <div class="module-count">
+                        {% if module_data is sequence and module_data is not string %}
+                            {{ module_data|length }} findings
+                        {% elif module_data %}
+                            1 finding
+                        {% else %}
+                            No findings
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="module-content" id="{{ module_name }}">
+                    {% if module_data %}
+                        {% if module_data is sequence and module_data is not string %}
+                            {% for finding in module_data %}
+                            <div class="finding {% if finding is mapping and finding.get('severity') == 'critical' %}critical{% elif finding is mapping and finding.get('severity') == 'warning' %}warning{% elif finding is mapping and finding.get('severity') == 'info' %}info{% else %}warning{% endif %}">
+                                <h4>
+                                    <span>
+                                        <span class="severity-indicator severity-{% if finding is mapping and finding.get('severity') == 'critical' %}critical{% elif finding is mapping and finding.get('severity') == 'warning' %}warning{% elif finding is mapping and finding.get('severity') == 'info' %}info{% else %}warning{% endif %}"></span>
+                                        {% if finding is mapping and finding.get('type', '').startswith('ssh_') %}
+                                            <span class="ssh-icon icon-{{ finding.get('type', '').replace('ssh_', '').replace('_', '-') }}"></span>
+                                        {% elif finding is mapping and finding.get('type') %}
+                                            <span class="ssh-icon icon-{{ finding.get('type', '').replace('_', '-') }}"></span>
+                                        {% endif %}
+                                        Finding #{{ loop.index }}
+                                        {% if finding is mapping and finding.get('category') %}
+                                            - {{ finding.get('category') }}
+                                        {% endif %}
+                                    </span>
+                                    <span>
+                                        <button class="export-btn" style="font-size: 0.8em; padding: 4px 8px; margin-right: 10px;" data-finding-type="{% if finding is mapping %}{{ finding.get('type', 'unknown') }}{% else %}unknown{% endif %}" onclick="toggleExplanation(this)">
+                                            Show Explanation
+                                        </button>
+                                        <span class="finding-type">
+                                            {% if finding is mapping %}
+                                                {% if finding.get('type') %}{{ finding.get('type') }}{% else %}Finding{% endif %}
+                                            {% else %}
+                                                Finding
+                                            {% endif %}
+                                        </span>
+                                    </span>
+                                </h4>
+                                
+                                {% if finding is mapping %}
+                                    {% if finding.get('type', '').startswith('ssh_') %}
+                                        <div class="ssh-key-info ssh-{{ finding.get('type', '').replace('ssh_', '').replace('_', '-') }}">
+                                            {% if finding.get('risk_level') %}
+                                                <div style="margin-bottom: 10px;">
+                                                    <span class="risk-badge risk-{{ finding.get('risk_level', '').lower() }}">
+                                                        {{ finding.get('risk_level') }} Risk
+                                                    </span>
+                                                </div>
+                                            {% endif %}
+                                            
+                                            <div class="finding-details">
+                                                {% for key, value in finding.items() %}
+                                                    {% if key not in ['type', 'severity', 'module', 'category', 'risk_level'] %}
+                                                    <div class="detail-row">
+                                                        <span class="detail-label">{{ key|title }}:</span>
+                                                        <span class="detail-value">
+                                                            {% if key == 'encrypted' %}
+                                                                {% if value %}
+                                                                    <span style="color: #28a745;">✓ Encrypted</span>
+                                                                {% else %}
+                                                                    <span style="color: #dc3545;">✗ Not Encrypted</span>
+                                                                {% endif %}
+                                                            {% elif key == 'secure_permissions' %}
+                                                                {% if value %}
+                                                                    <span style="color: #28a745;">✓ Secure ({{ finding.get('permissions', 'Unknown') }})</span>
+                                                                {% else %}
+                                                                    <span style="color: #dc3545;">✗ Insecure ({{ finding.get('permissions', 'Unknown') }})</span>
+                                                                {% endif %}
+                                                            {% elif value is string and value|length > 100 %}
+                                                                <span title="{{ value }}">{{ value[:100] }}...</span>
+                                                            {% else %}
+                                                                {{ value }}
+                                                            {% endif %}
+                                                        </span>
+                                                    </div>
+                                                    {% endif %}
+                                                {% endfor %}
+                                            </div>
+                                        </div>
+                                    {% elif finding.get('type', '').startswith('browser_') %}
+                                        <div class="ssh-key-info browser-info">
+                                            {% if finding.get('risk_level') %}
+                                                <div style="margin-bottom: 10px;">
+                                                    <span class="risk-badge risk-{{ finding.get('risk_level', '').lower() }}">
+                                                        {{ finding.get('risk_level') }} Risk
+                                                    </span>
+                                                </div>
+                                            {% endif %}
+                                            
+                                            <div class="finding-details">
+                                                {% for key, value in finding.items() %}
+                                                    {% if key not in ['type', 'severity', 'module', 'category', 'risk_level'] %}
+                                                    <div class="detail-row">
+                                                        <span class="detail-label">{{ key|title }}:</span>
+                                                        <span class="detail-value">
+                                                            {% if key == 'password' %}
+                                                                <span style="color: #dc3545;">{{ value }}</span>
+                                                            {% elif value is string and value|length > 100 %}
+                                                                <span title="{{ value }}">{{ value[:100] }}...</span>
+                                                            {% else %}
+                                                                {{ value }}
+                                                            {% endif %}
+                                                        </span>
+                                                    </div>
+                                                    {% endif %}
+                                                {% endfor %}
+                                            </div>
+                                        </div>
+                                    {% elif finding.get('type', '').startswith('keyring_') %}
+                                        <div class="ssh-key-info keyring-info">
+                                            {% if finding.get('risk_level') %}
+                                                <div style="margin-bottom: 10px;">
+                                                    <span class="risk-badge risk-{{ finding.get('risk_level', '').lower() }}">
+                                                        {{ finding.get('risk_level') }} Risk
+                                                    </span>
+                                                </div>
+                                            {% endif %}
+                                            
+                                            <div class="finding-details">
+                                                {% for key, value in finding.items() %}
+                                                    {% if key not in ['type', 'severity', 'module', 'category', 'risk_level'] %}
+                                                    <div class="detail-row">
+                                                        <span class="detail-label">{{ key|title }}:</span>
+                                                        <span class="detail-value">
+                                                            {% if key in ['secret', 'value'] %}
+                                                                <span style="color: #dc3545;">{{ value }}</span>
+                                                            {% elif value is string and value|length > 100 %}
+                                                                <span title="{{ value }}">{{ value[:100] }}...</span>
+                                                            {% else %}
+                                                                {{ value }}
+                                                            {% endif %}
+                                                        </span>
+                                                    </div>
+                                                    {% endif %}
+                                                {% endfor %}
+                                            </div>
+                                        </div>
+                                    {% elif finding.get('type', '').startswith('memory_') %}
+                                        <div class="ssh-key-info memory-info">
+                                            {% if finding.get('risk_level') %}
+                                                <div style="margin-bottom: 10px;">
+                                                    <span class="risk-badge risk-{{ finding.get('risk_level', '').lower() }}">
+                                                        {{ finding.get('risk_level') }} Risk
+                                                    </span>
+                                                </div>
+                                            {% endif %}
+                                            
+                                            <div class="finding-details">
+                                                {% for key, value in finding.items() %}
+                                                    {% if key not in ['type', 'severity', 'module', 'category', 'risk_level'] %}
+                                                    <div class="detail-row">
+                                                        <span class="detail-label">{{ key|title }}:</span>
+                                                        <span class="detail-value">
+                                                            {% if value is string and value|length > 100 %}
+                                                                <span title="{{ value }}">{{ value[:100] }}...</span>
+                                                            {% else %}
+                                                                {{ value }}
+                                                            {% endif %}
+                                                        </span>
+                                                    </div>
+                                                    {% endif %}
+                                                {% endfor %}
+                                            </div>
+                                        </div>
+                                    {% elif finding.get('type', '').startswith('dotfile_') %}
+                                        <div class="ssh-key-info dotfile-info">
+                                            {% if finding.get('risk_level') %}
+                                                <div style="margin-bottom: 10px;">
+                                                    <span class="risk-badge risk-{{ finding.get('risk_level', '').lower() }}">
+                                                        {{ finding.get('risk_level') }} Risk
+                                                    </span>
+                                                </div>
+                                            {% endif %}
+                                            
+                                            <div class="finding-details">
+                                                {% for key, value in finding.items() %}
+                                                    {% if key not in ['type', 'severity', 'module', 'category', 'risk_level'] %}
+                                                    <div class="detail-row">
+                                                        <span class="detail-label">{{ key|title }}:</span>
+                                                        <span class="detail-value">
+                                                            {% if key == 'content' and value|length > 200 %}
+                                                                <span title="{{ value }}">{{ value[:200] }}...</span>
+                                                            {% elif value is string and value|length > 100 %}
+                                                                <span title="{{ value }}">{{ value[:100] }}...</span>
+                                                            {% else %}
+                                                                {{ value }}
+                                                            {% endif %}
+                                                        </span>
+                                                    </div>
+                                                    {% endif %}
+                                                {% endfor %}
+                                            </div>
+                                        </div>
+                                    {% elif finding.get('type', '').startswith('history_') %}
+                                        <div class="ssh-key-info history-info">
+                                            {% if finding.get('risk_level') %}
+                                                <div style="margin-bottom: 10px;">
+                                                    <span class="risk-badge risk-{{ finding.get('risk_level', '').lower() }}">
+                                                        {{ finding.get('risk_level') }} Risk
+                                                    </span>
+                                                </div>
+                                            {% endif %}
+                                            
+                                            <div class="finding-details">
+                                                {% for key, value in finding.items() %}
+                                                    {% if key not in ['type', 'severity', 'module', 'category', 'risk_level'] %}
+                                                    <div class="detail-row">
+                                                        <span class="detail-label">{{ key|title }}:</span>
+                                                        <span class="detail-value">
+                                                            {% if key == 'command' and value|length > 200 %}
+                                                                <span title="{{ value }}">{{ value[:200] }}...</span>
+                                                            {% elif value is string and value|length > 100 %}
+                                                                <span title="{{ value }}">{{ value[:100] }}...</span>
+                                                            {% else %}
+                                                                {{ value }}
+                                                            {% endif %}
+                                                        </span>
+                                                    </div>
+                                                    {% endif %}
+                                                {% endfor %}
+                                            </div>
+                                        </div>
+                                    {% else %}
+                                        <div class="finding-details">
+                                            {% for key, value in finding.items() %}
+                                                {% if key not in ['type', 'severity'] %}
+                                                <div class="detail-row">
+                                                    <span class="detail-label">{{ key|title }}:</span>
+                                                    <span class="detail-value">
+                                                        {% if value is string and value|length > 100 %}
+                                                            <span title="{{ value }}">{{ value[:100] }}...</span>
+                                                        {% else %}
+                                                            {{ value }}
+                                                        {% endif %}
+                                                    </span>
+                                                </div>
+                                                {% endif %}
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                {% else %}
+                                    <div class="code">{{ finding|tojson(indent=2) }}</div>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="finding info">
+                                <h4>
+                                    <span>
+                                        <span class="severity-indicator severity-info"></span>
+                                        Module Results
+                                    </span>
+                                </h4>
+                                <div class="code">{{ module_data|tojson(indent=2) }}</div>
+                            </div>
+                        {% endif %}
+                    {% else %}
+                        <div class="no-findings">
+                            <strong>No findings in this module</strong><br>
+                            This module completed successfully but found no credentials or secrets.
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <script>
+        function toggleModule(moduleName) {
+            const content = document.getElementById(moduleName);
+            content.classList.toggle('active');
+        }
+
+        function exportToJSON() {
+            const data = JSON.parse('{{ results|tojson|safe }}');
+            const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'credfinder_report.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function getFindingExplanation(findingType, severity) {
+            const explanations = {
+                'ssh_private_key': {
+                    title: 'SSH Private Key Found',
+                    content: 'This private SSH key can be used to authenticate to remote systems. If unencrypted, it can be used immediately. If encrypted, you may need to crack the passphrase.',
+                    recommendation: 'Use this key to attempt SSH connections to common targets. Check for corresponding public keys in authorized_keys files. If encrypted, try common passphrases or use tools like ssh2john + hashcat.'
+                },
+                'ssh_public_key': {
+                    title: 'SSH Public Key Found',
+                    content: 'This public key can be used to identify the corresponding private key and potentially find additional targets that trust this key.',
+                    recommendation: 'Search for this public key in authorized_keys files across the network. Use the key fingerprint to identify the private key. Check if this key is used for automated deployments or service accounts.'
+                },
+                'ssh_agent_identity': {
+                    title: 'SSH Agent Identity Loaded',
+                    content: 'An SSH key is loaded in the agent and ready for use. This bypasses the need for a passphrase and can be used immediately for authentication.',
+                    recommendation: 'Use ssh-add -l to list all loaded keys. Attempt connections to known targets using these identities. Check for SSH agent forwarding opportunities.'
+                },
+                'ssh_known_hosts': {
+                    title: 'SSH Known Hosts File',
+                    content: 'This file contains the public keys of hosts this system has connected to, revealing potential targets and their key fingerprints.',
+                    recommendation: 'Extract hostnames and IPs from known_hosts for target enumeration. Use the key fingerprints to identify host types and potential vulnerabilities. Check for internal network ranges.'
+                },
+                'ssh_config': {
+                    title: 'SSH Configuration File',
+                    content: 'SSH configs can reveal hardcoded credentials, proxy configurations, and connection parameters that can be exploited.',
+                    recommendation: 'Look for ProxyCommand, IdentityFile, User, and HostName entries. Check for hardcoded passwords or key paths. Use these configs to understand the target\'s SSH infrastructure.'
+                },
+                'browser_credential': {
+                    title: 'Browser Credential Found',
+                    content: 'Saved browser credentials can be extracted and used for authentication to web applications, potentially providing access to sensitive systems.',
+                    recommendation: 'Use these credentials to access the target websites. Check for password reuse across accounts. Look for admin panels, email systems, or cloud services. Test for session hijacking opportunities.'
+                },
+                'keyring_entry': {
+                    title: 'Desktop Keyring Entry',
+                    content: 'Desktop keyrings store application passwords and can be dumped to reveal credentials for various services and applications.',
+                    recommendation: 'Extract all keyring entries and test the credentials against their respective services. Look for database passwords, API keys, and application logins. Check for service account credentials.'
+                },
+                'memory_secret': {
+                    title: 'Secret Found in Memory',
+                    content: 'Secrets found in process memory can be extracted and used immediately. These are often in plaintext and ready for use.',
+                    recommendation: 'Extract the secret and test it against the target service. Look for API keys, tokens, passwords, or certificates. Use memory dumps for deeper analysis if possible.'
+                },
+                'dotfile_credential': {
+                    title: 'Credential in Configuration File',
+                    content: 'Hardcoded credentials in config files can provide immediate access to services, databases, or applications.',
+                    recommendation: 'Test these credentials against the target services. Look for database connections, API access, or application logins. Check for privilege escalation opportunities.'
+                },
+                'dotfile_config': {
+                    title: 'Configuration File Found',
+                    content: 'Configuration files can reveal service endpoints, connection strings, and system information useful for further enumeration.',
+                    recommendation: 'Analyze configs for service URLs, database connections, API endpoints, and internal network information. Use this data for service enumeration and exploitation.'
+                },
+                'dotfile_sensitive': {
+                    title: 'Sensitive Configuration File',
+                    content: 'Sensitive config files often contain API keys, tokens, or connection details that can be used for lateral movement or data access.',
+                    recommendation: 'Extract API keys and tokens for immediate use. Test AWS credentials, database connections, or service accounts. Look for backup files or additional configs.'
+                },
+                'history_credential': {
+                    title: 'Credential in Shell History',
+                    content: 'Commands with credentials in shell history can reveal passwords, tokens, or connection strings that are still valid.',
+                    recommendation: 'Extract and test any credentials found in commands. Look for database connections, SSH commands, or API calls. Check for password reuse patterns.'
+                },
+                'history_command': {
+                    title: 'Shell Command in History',
+                    content: 'Shell history reveals system usage patterns, installed tools, and potential attack vectors.',
+                    recommendation: 'Analyze commands for system information, installed software, and user behavior. Look for privilege escalation opportunities or misconfigurations.'
+                },
+                'history_sensitive': {
+                    title: 'Sensitive Command in History',
+                    content: 'Sensitive commands can reveal file transfers, network connections, or administrative actions that provide attack vectors.',
+                    recommendation: 'Use revealed file paths, network connections, or commands for further enumeration. Look for data exfiltration opportunities or administrative access.'
+                }
+            };
+            
+            return explanations[findingType] || {
+                title: 'Finding Detected',
+                content: 'A security-related finding was detected that may provide an attack vector.',
+                recommendation: 'Analyze this finding for potential exploitation opportunities and lateral movement possibilities.'
+            };
+        }
+
+        function addExplanationToFinding(findingElement, findingType) {
+            const explanation = getFindingExplanation(findingType);
+            
+            const explanationBox = document.createElement('div');
+            explanationBox.className = 'explanation-box';
+            explanationBox.innerHTML = '<div class="explanation-title">' + explanation.title + '</div><div class="explanation-content">' + explanation.content + '</div>';
+            
+            const recommendationBox = document.createElement('div');
+            recommendationBox.className = 'recommendation-box';
+            recommendationBox.innerHTML = '<div class="recommendation-title">Recommendation</div><div class="recommendation-content">' + explanation.recommendation + '</div>';
+            
+            findingElement.appendChild(explanationBox);
+            findingElement.appendChild(recommendationBox);
+        }
+
+        function toggleExplanation(button) {
+            const findingType = button.getAttribute('data-finding-type');
+            const findingElement = button.closest('.finding');
+            const existingExplanation = findingElement.querySelector('.explanation-box');
+            
+            if (existingExplanation) {
+                existingExplanation.remove();
+                findingElement.querySelector('.recommendation-box').remove();
+                button.textContent = 'Show Explanation';
+            } else {
+                addExplanationToFinding(findingElement, findingType);
+                button.textContent = 'Hide Explanation';
+            }
+        }
+
+        // Auto-expand modules with findings
+        document.addEventListener('DOMContentLoaded', function() {
+            const modules = document.querySelectorAll('.module');
+            modules.forEach(module => {
+                const content = module.querySelector('.module-content');
+                const findings = content.querySelectorAll('.finding');
+                if (findings.length > 0) {
+                    content.classList.add('active');
+                }
+            });
+            
+            // Auto-show explanations for critical findings
+            const criticalFindings = document.querySelectorAll('.finding.critical');
+            criticalFindings.forEach(finding => {
+                const typeElement = finding.querySelector('.finding-type');
+                if (typeElement) {
+                    const findingType = typeElement.textContent.trim();
+                    addExplanationToFinding(finding, findingType);
+                    
+                    // Update button text
+                    const button = finding.querySelector('button');
+                    if (button) {
+                        button.textContent = 'Hide Explanation';
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html> 
