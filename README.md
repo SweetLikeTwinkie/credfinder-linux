@@ -1,3 +1,5 @@
+![ChatGPT Image Jun 23, 2025, 02_49_54 PM](https://github.com/user-attachments/assets/a7bfe52f-7d10-42cb-9226-10a0ceb165b1)
+
 # credfinder-linux
 
 **Linux Credential & Secret Hunting Toolkit**
