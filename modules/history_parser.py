@@ -9,7 +9,9 @@ import re
 from typing import List, Dict, Any
 
 class HistoryParser:
+    """Parses shell history files for credentials and secrets."""
     def __init__(self, config):
+        """Initialize the HistoryParser with the given configuration."""
         self.config = config
         self.history_paths = [
             os.path.expanduser("~/.bash_history"),
@@ -20,6 +22,7 @@ class HistoryParser:
         self.patterns = config.get("patterns", {})
 
     def parse(self) -> List[Dict[str, Any]]:
+        """Parse all configured history files and return findings."""
         findings = []
         for path in self.history_paths:
             if os.path.exists(path):

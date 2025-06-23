@@ -31,7 +31,7 @@ from modules.utils.config_loader import ConfigLoader
 
 
 class ExecutionStrategy:
-    """Стратегии выполнения модулей"""
+    """Module execution strategies"""
     PRIORITY_BASED = "priority"
     CUSTOM_ORDER = "custom"
     TIME_OPTIMIZED = "time_optimized"
@@ -39,7 +39,7 @@ class ExecutionStrategy:
 
 
 class ModuleResult:
-    """Структурированный результат выполнения модуля"""
+    """Structured result of module execution"""
     def __init__(self, module_name: str, status: str, data: Any = None, 
                  error: str = None, execution_time: float = 0.0, 
                  skipped_reason: str = None):
@@ -52,9 +52,11 @@ class ModuleResult:
         self.timestamp = datetime.now()
     
     def is_successful(self) -> bool:
+        """Return True if the module execution was successful and data is present."""
         return self.status == 'success' and self.data is not None
     
     def to_dict(self) -> Dict[str, Any]:
+        """Convert the result to a dictionary."""
         return {
             'module_name': self.module_name,
             'status': self.status,
@@ -67,15 +69,15 @@ class ModuleResult:
 
 
 class SafeFileSystemManager:
-    """Безопасное управление файловой системой"""
+    """Safe file system management."""
     
     @staticmethod
     def validate_output_path(output_path: str, allowed_dirs: List[str] = None) -> Path:
-        """Валидация пути для записи с проверками безопасности"""
+        """Validate output path for writing with security checks."""
         try:
             path = Path(output_path).resolve()
             
-            # Проверяем разрешенные директории
+            # Check allowed directories
             if allowed_dirs:
                 allowed = False
                 for allowed_dir in allowed_dirs:
@@ -90,23 +92,23 @@ class SafeFileSystemManager:
                 if not allowed:
                     raise ValueError(f"Output path {path} not in allowed directories: {allowed_dirs}")
             
-            # Проверяем существующий путь
+            # Check existing path
             if path.exists():
-                # Не симлинк
+                # Not a symlink
                 if path.is_symlink():
                     raise ValueError(f"Output path {path} is a symbolic link")
                 
-                # Не устройство
+                # Not a device
                 if path.is_block_device() or path.is_char_device():
                     raise ValueError(f"Output path {path} is a device")
                 
-                # Если файл - проверяем, что это обычный файл
+                # If file, check it's a regular file
                 if path.is_file():
                     st = path.stat()
                     if not stat.S_ISREG(st.st_mode):
                         raise ValueError(f"Output path {path} is not a regular file")
                 
-                # Если директория - проверяем права
+                # If directory, check permissions
                 if path.is_dir():
                     if not os.access(path, os.W_OK):
                         raise PermissionError(f"No write permission for directory {path}")
@@ -118,7 +120,7 @@ class SafeFileSystemManager:
     
     @staticmethod
     def check_disk_space(path: Path, min_space_mb: int = 100) -> bool:
-        """Проверка свободного места на диске"""
+        """Check free disk space in MB."""
         try:
             statvfs = os.statvfs(path.parent if path.is_file() else path)
             free_space = statvfs.f_frsize * statvfs.f_bavail
@@ -133,7 +135,7 @@ class SafeFileSystemManager:
     
     @staticmethod
     def safe_create_directory(path: Path, mode: int = 0o750) -> Path:
-        """Безопасное создание директории"""
+        """Safely create a directory with the given mode."""
         try:
             path.mkdir(parents=True, exist_ok=True, mode=mode)
             
@@ -146,7 +148,7 @@ class SafeFileSystemManager:
     
     @staticmethod
     def atomic_write(file_path: Path, data: str, mode: int = 0o640) -> Path:
-        """Атомарная запись файла"""
+        """Atomically write a file."""
         try:
             temp_path = file_path.with_suffix(f'{file_path.suffix}.tmp')
             
@@ -169,7 +171,7 @@ class SafeFileSystemManager:
 
 
 class ModuleRunner:
-    """Управляет выполнением модулей с расширенными возможностями"""
+    """Manages module execution with advanced features."""
     
     def __init__(self, config, logger: Logger):
         self.config = config
@@ -270,7 +272,7 @@ class ModuleRunner:
         return True, ""
     
     def run_module_safe(self, module_name: str) -> ModuleResult:
-        """Безопасное выполнение модуля с расширенной обработкой ошибок"""
+        """Safely execute a module with extended error handling."""
         start_time = datetime.now()
         
         try:
@@ -345,11 +347,11 @@ class ModuleRunner:
     
     def get_execution_order(self, module_names: List[str], strategy: str = ExecutionStrategy.PRIORITY_BASED, 
                            custom_order: List[str] = None) -> List[str]:
-        """Определение порядка выполнения модулей"""
+        """Determine the execution order of modules."""
         valid_modules = [name for name in module_names if name in self.modules]
         
         if strategy == ExecutionStrategy.CUSTOM_ORDER and custom_order:
-            # Пользовательский порядок
+            # User-defined order
             ordered = []
             for module in custom_order:
                 if module in valid_modules:
@@ -363,7 +365,7 @@ class ModuleRunner:
             return ordered
         
         elif strategy == ExecutionStrategy.TIME_OPTIMIZED:
-            # Сначала быстрые, потом медленные
+            # Fast first, then medium, then slow
             fast_modules = [m for m in valid_modules if self.modules[m]['estimated_time'] == 'fast']
             medium_modules = [m for m in valid_modules if self.modules[m]['estimated_time'] == 'medium']
             slow_modules = [m for m in valid_modules if self.modules[m]['estimated_time'] == 'slow']
@@ -371,13 +373,13 @@ class ModuleRunner:
             return fast_modules + medium_modules + slow_modules
         
         elif strategy == ExecutionStrategy.DEPENDENCY_AWARE:
-            # Учитываем зависимости (пока простая реализация)
+            # Take dependencies into account (simple implementation)
             return sorted(valid_modules, key=lambda x: (
                 len(self.modules[x].get('dependencies', [])),
                 self.modules[x]['priority']
             ))
         
-        else:  # PRIORITY_BASED (по умолчанию)
+        else:  # PRIORITY_BASED (default)
             return sorted(valid_modules, key=lambda x: self.modules[x]['priority'])
     
     def run_modules_parallel(self, module_names: List[str], max_workers: int = 3) -> Dict[str, ModuleResult]:
@@ -452,6 +454,8 @@ class ModuleRunner:
 
 
 class CredFinder:
+    """Main class for credfinder-linux application."""
+    
     def __init__(self, config_path="config.json"):
         self.config = ConfigLoader(config_path)
         
@@ -478,7 +482,7 @@ class CredFinder:
     def run_scan(self, modules: List[str], parallel: bool = True, 
                  execution_strategy: str = ExecutionStrategy.PRIORITY_BASED,
                  custom_order: List[str] = None, max_workers: int = 3) -> Dict[str, Any]:
-        """Главный метод сканирования с гибким управлением"""
+        """Main scan method with flexible management."""
         
         # Определяем порядок выполнения
         execution_order = self.module_runner.get_execution_order(
@@ -543,7 +547,7 @@ class CredFinder:
             raise
     
     def save_results(self, output_dir="./reports"):
-        """Безопасное сохранение результатов с расширенными проверками"""
+        """Safely save results with extended checks."""
         try:
             self.logger.info(f"Saving results to {output_dir}")
             

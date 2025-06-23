@@ -3,11 +3,14 @@ import os
 import sys
 
 class ConfigLoader:
+    """Loader and manager for application configuration files."""
     def __init__(self, config_path="config.json"):
+        """Initialize the ConfigLoader with the given config file path."""
         self.config_path = config_path
         self._config = self._load_config()
 
     def _load_config(self):
+        """Load configuration from the config file, handling errors and size limits."""
         if os.path.exists(self.config_path):
             try:
                 # Check file size first
@@ -37,9 +40,11 @@ class ConfigLoader:
             return {}
 
     def get(self, key, default=None):
+        """Get a configuration value by key, returning default if not found."""
         return self._config.get(key, default)
 
     def set_scan_paths(self, target_path):
+        """Override scan paths for all modules with the given target path."""
         # Override scan paths for all modules
         for section in self._config.get("scan_paths", {}):
             if isinstance(self._config["scan_paths"][section], list):
@@ -49,12 +54,14 @@ class ConfigLoader:
                     self._config["scan_paths"][section][sub] = [target_path]
 
     def set_opsec_mode(self, enabled=True):
+        """Enable or disable operational security (opsec) mode."""
         self._config["opsec"] = self._config.get("opsec", {})
         self._config["opsec"]["minimal_logging"] = enabled
         self._config["opsec"]["no_network_calls"] = enabled
         self._config["opsec"]["clean_exit"] = enabled
 
     def save(self):
+        """Save the current configuration to the config file."""
         try:
             with open(self.config_path, 'w') as f:
                 json.dump(self._config, f, indent=2)

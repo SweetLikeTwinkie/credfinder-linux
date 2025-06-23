@@ -9,9 +9,9 @@ from pathlib import Path
 
 
 class CredFinderFormatter(logging.Formatter):
-    """Кастомный форматтер для credfinder-linux"""
+    """Custom formatter for credfinder-linux"""
     
-    # Цветовые коды для консоли
+    # Color codes for console
     COLORS = {
         'DEBUG': '\033[36m',     # Cyan
         'INFO': '\033[32m',      # Green
@@ -34,9 +34,9 @@ class CredFinderFormatter(logging.Formatter):
         super().__init__(fmt, datefmt='%Y-%m-%d %H:%M:%S')
     
     def format(self, record):
-        # Добавляем поддержку SUCCESS уровня
+        # Add support for SUCCESS level
         if record.levelname == 'SUCCESS':
-            record.levelno = 25  # Между INFO (20) и WARNING (30)
+            record.levelno = 25  # Between INFO (20) and WARNING (30)
         
         formatted = super().format(record)
         
@@ -49,7 +49,7 @@ class CredFinderFormatter(logging.Formatter):
 
 
 class Logger:
-    """Улучшенный логгер для credfinder-linux на основе стандартного logging"""
+    """Enhanced logger for credfinder-linux based on standard logging"""
     
     def __init__(self, name="credfinder", minimal_logging=False, 
                  log_file: Optional[str] = None, log_level="INFO"):
@@ -84,12 +84,12 @@ class Logger:
         self.log_file = log_file
     
     def _setup_file_logging(self, log_file: str):
-        """Настройка логирования в файл с ротацией"""
+        """Configure file logging with rotation"""
         try:
             log_path = Path(log_file)
             log_path.parent.mkdir(parents=True, exist_ok=True)
             
-            # Используем RotatingFileHandler для автоматической ротации
+            # Use RotatingFileHandler for automatic rotation
             file_handler = logging.handlers.RotatingFileHandler(
                 log_file, 
                 maxBytes=10*1024*1024,  # 10MB
@@ -98,50 +98,50 @@ class Logger:
             )
             file_handler.setLevel(logging.DEBUG)
             
-            # JSON форматтер для файлов
+            # JSON formatter for files
             file_formatter = JsonFormatter()
             file_handler.setFormatter(file_formatter)
             
             self.logger.addHandler(file_handler)
             
         except Exception as e:
-            # Если не можем настроить файловое логирование, продолжаем без него
+            # If file logging cannot be set up, continue without it
             self.logger.warning(f"Failed to setup file logging: {e}")
     
     def info(self, message: str, extra: Optional[Dict[str, Any]] = None):
-        """Информационное сообщение"""
+        """Informational message"""
         self.logger.info(message, extra=self._prepare_extra(extra))
     
     def warning(self, message: str, extra: Optional[Dict[str, Any]] = None):
-        """Предупреждение"""
+        """Warning"""
         self.logger.warning(message, extra=self._prepare_extra(extra))
     
     def error(self, message: str, extra: Optional[Dict[str, Any]] = None):
-        """Ошибка"""
+        """Error"""
         self.logger.error(message, extra=self._prepare_extra(extra))
     
     def critical(self, message: str, extra: Optional[Dict[str, Any]] = None):
-        """Критическая ошибка"""
+        """Critical error"""
         self.logger.critical(message, extra=self._prepare_extra(extra))
     
     def debug(self, message: str, extra: Optional[Dict[str, Any]] = None):
-        """Отладочное сообщение"""
+        """Debug message"""
         self.logger.debug(message, extra=self._prepare_extra(extra))
     
     def success(self, message: str, extra: Optional[Dict[str, Any]] = None):
-        """Сообщение об успехе"""
+        """Success message"""
         self.logger.log(25, message, extra=self._prepare_extra(extra))
     
     def exception(self, message: str, exc_info=True, extra: Optional[Dict[str, Any]] = None):
-        """Логирование исключения с трассировкой стека"""
+        """Exception logging with stack trace"""
         self.logger.error(message, exc_info=exc_info, extra=self._prepare_extra(extra))
     
     def log_module_start(self, module_name: str):
-        """Специальный метод для логирования начала выполнения модуля"""
+        """Special method for logging the start of module execution"""
         self.info(f"Starting module: {module_name}", {"module_name": module_name, "event": "start"})
     
     def log_module_success(self, module_name: str, execution_time: float, findings_count: int = 0):
-        """Специальный метод для логирования успешного завершения модуля"""
+        """Special method for logging successful module completion"""
         self.success(
             f"Module {module_name} completed successfully in {execution_time:.2f}s",
             {
@@ -153,7 +153,7 @@ class Logger:
         )
     
     def log_module_error(self, module_name: str, error: Exception, execution_time: float = 0):
-        """Специальный метод для логирования ошибки модуля"""
+        """Special method for logging module error"""
         self.error(
             f"Module {module_name} failed: {str(error)}",
             {
@@ -165,12 +165,12 @@ class Logger:
             }
         )
         
-        # Логируем полную трассировку стека в debug режиме
+        # Log full stack trace in debug mode
         if not self.minimal_logging:
             self.exception(f"Full traceback for {module_name}")
     
     def log_module_skip(self, module_name: str, reason: str):
-        """Специальный метод для логирования пропуска модуля"""
+        """Special method for logging module skip"""
         self.warning(
             f"Module {module_name} skipped: {reason}",
             {
@@ -181,7 +181,7 @@ class Logger:
         )
     
     def log_module_timeout(self, module_name: str, timeout: int):
-        """Специальный метод для логирования таймаута модуля"""
+        """Special method for logging module timeout"""
         self.error(
             f"Module {module_name} timed out after {timeout}s",
             {
@@ -192,36 +192,36 @@ class Logger:
         )
     
     def _prepare_extra(self, extra: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-        """Подготавливает дополнительные данные для логирования"""
+        """Prepares extra data for logging"""
         if extra is None:
             return None
         
-        # Добавляем timestamp для структурированного логирования
+        # Add timestamp for structured logging
         prepared = extra.copy()
         prepared['timestamp'] = datetime.now().isoformat()
         
         return prepared
     
     def set_level(self, level: str):
-        """Динамическое изменение уровня логирования"""
+        """Dynamically change logging level"""
         log_level = getattr(logging, level.upper(), logging.INFO)
         for handler in self.logger.handlers:
             if isinstance(handler, logging.StreamHandler) and handler.stream == sys.stderr:
                 handler.setLevel(log_level)
     
     def enable_debug(self):
-        """Включить debug режим"""
+        """Enable debug mode"""
         self.set_level("DEBUG")
         self.minimal_logging = False
     
     def enable_minimal(self):
-        """Включить минимальный режим логирования"""
+        """Enable minimal logging mode"""
         self.set_level("ERROR")
         self.minimal_logging = True
 
 
 class JsonFormatter(logging.Formatter):
-    """JSON форматтер для файлового логирования"""
+    """JSON formatter for file logging"""
     
     def format(self, record):
         log_entry = {
@@ -246,5 +246,5 @@ class JsonFormatter(logging.Formatter):
 
 
 def get_logger(name="credfinder", **kwargs) -> Logger:
-    """Фабричная функция для создания логгера"""
+    """Factory function for creating a logger"""
     return Logger(name, **kwargs) 

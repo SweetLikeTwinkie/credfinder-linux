@@ -11,12 +11,12 @@ from typing import List, Optional, Union
 
 
 class SecurityError(Exception):
-    """Исключение для проблем безопасности"""
+    """Exception for security issues"""
     pass
 
 
 class FileSecurityManager:
-    """Менеджер безопасности для файловых операций"""
+    """Security manager for file operations"""
     
     def __init__(self, config: dict):
         self.config = config
@@ -28,20 +28,20 @@ class FileSecurityManager:
         self.forbidden_paths = security_config.get("forbidden_paths", ["/dev", "/proc/*/mem"])
         
     def validate_path(self, path: Union[str, Path], check_exists: bool = True) -> Path:
-        """Валидация пути на безопасность"""
+        """Validate path for security"""
         path = Path(path).resolve()
         
-        # Проверяем на запрещенные пути
+        # Check for forbidden paths
         path_str = str(path)
         for forbidden in self.forbidden_paths:
             if path_str.startswith(forbidden.replace("*", "")):
                 raise SecurityError(f"Access to forbidden path: {path}")
         
-        # Проверяем существование если требуется
+        # Check existence if required
         if check_exists and not path.exists():
             raise SecurityError(f"Path does not exist: {path}")
         
-        # Проверяем что это не симлинк на критичные системные файлы
+        # Check that this is not a symlink to critical system files
         if path.is_symlink():
             target = path.readlink()
             if str(target).startswith(("/dev", "/proc", "/sys")):
@@ -50,10 +50,10 @@ class FileSecurityManager:
         return path
     
     def validate_output_directory(self, output_dir: Union[str, Path]) -> Path:
-        """Валидация директории вывода"""
+        """Validate output directory"""
         output_path = Path(output_dir).resolve()
         
-        # Проверяем что директория в списке разрешенных
+        # Check that the directory is in the allowed list
         allowed = False
         for allowed_dir in self.allowed_output_dirs:
             allowed_path = Path(allowed_dir).expanduser().resolve()
@@ -67,18 +67,18 @@ class FileSecurityManager:
         if not allowed:
             raise SecurityError(f"Output directory not in allowed list: {output_path}")
         
-        # Проверяем что это не симлинк
+        # Check that this is not a symlink
         if output_path.exists() and output_path.is_symlink():
             raise SecurityError(f"Output directory is a symbolic link: {output_path}")
         
-        # Проверяем что это не устройство
+        # Check that this is not a device
         if output_path.exists() and not output_path.is_dir():
             raise SecurityError(f"Output path is not a directory: {output_path}")
         
         return output_path
     
     def check_file_size(self, file_path: Union[str, Path]) -> bool:
-        """Проверка размера файла"""
+        """Check file size"""
         try:
             size = os.path.getsize(file_path)
             if size > self.max_file_size:
@@ -88,7 +88,7 @@ class FileSecurityManager:
             raise SecurityError(f"Cannot check file size: {e}")
     
     def check_free_space(self, path: Union[str, Path]) -> bool:
-        """Проверка свободного места"""
+        """Check free disk space"""
         try:
             statvfs = os.statvfs(path)
             free_space = statvfs.f_frsize * statvfs.f_bavail
@@ -99,18 +99,18 @@ class FileSecurityManager:
             raise SecurityError(f"Cannot check disk space: {e}")
     
     def safe_create_directory(self, dir_path: Union[str, Path], mode: int = 0o750) -> Path:
-        """Безопасное создание директории"""
+        """Safely create a directory"""
         dir_path = self.validate_output_directory(dir_path)
         
         if not dir_path.exists():
-            # Проверяем свободное место
+            # Check free space
             parent = dir_path.parent
             self.check_free_space(parent)
             
-            # Создаем директорию с безопасными правами
+            # Create directory with secure permissions
             dir_path.mkdir(parents=True, exist_ok=True, mode=mode)
         
-        # Проверяем права доступа
+        # Check write permissions
         if not os.access(dir_path, os.W_OK):
             raise SecurityError(f"No write permission for directory: {dir_path}")
         
@@ -118,17 +118,17 @@ class FileSecurityManager:
     
     def safe_write_file(self, file_path: Union[str, Path], content: Union[str, bytes], 
                        mode: int = 0o640, atomic: bool = True) -> Path:
-        """Безопасная запись файла"""
+        """Safely write a file"""
         file_path = Path(file_path).resolve()
         
-        # Валидируем директорию
+        # Validate directory
         self.validate_output_directory(file_path.parent)
         
-        # Проверяем свободное место
+        # Check free space
         self.check_free_space(file_path.parent)
         
         if atomic:
-            # Атомарная запись через временный файл
+            # Atomic write via temporary file
             temp_path = file_path.with_suffix('.tmp')
             
             try:
@@ -136,19 +136,19 @@ class FileSecurityManager:
                          encoding='utf-8' if isinstance(content, str) else None) as f:
                     f.write(content)
                 
-                # Устанавливаем права доступа
+                # Set permissions
                 os.chmod(temp_path, mode)
                 
-                # Атомарное переименование
+                # Atomic rename
                 temp_path.rename(file_path)
                 
             except Exception as e:
-                # Очищаем временный файл при ошибке
+                # Clean up temp file on error
                 if temp_path.exists():
                     temp_path.unlink()
                 raise SecurityError(f"Failed to write file atomically: {e}")
         else:
-            # Обычная запись
+            # Regular write
             with open(file_path, 'w' if isinstance(content, str) else 'wb',
                      encoding='utf-8' if isinstance(content, str) else None) as f:
                 f.write(content)
@@ -158,16 +158,16 @@ class FileSecurityManager:
         return file_path
     
     def safe_read_file(self, file_path: Union[str, Path], max_size: Optional[int] = None) -> Union[str, bytes]:
-        """Безопасное чтение файла"""
+        """Safely read a file"""
         file_path = self.validate_path(file_path, check_exists=True)
         
-        # Проверяем размер файла
+        # Check file size
         check_size = max_size or self.max_file_size
         size = os.path.getsize(file_path)
         if size > check_size:
             raise SecurityError(f"File too large to read: {size} bytes")
         
-        # Проверяем права доступа
+        # Check read permissions
         if not os.access(file_path, os.R_OK):
             raise SecurityError(f"No read permission for file: {file_path}")
         
@@ -175,12 +175,12 @@ class FileSecurityManager:
             with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                 return f.read()
         except UnicodeDecodeError:
-            # Пробуем как бинарный файл
+            # Try as binary file
             with open(file_path, 'rb') as f:
                 return f.read()
     
     def is_safe_symlink(self, link_path: Union[str, Path]) -> bool:
-        """Проверка безопасности символической ссылки"""
+        """Check symlink safety"""
         link_path = Path(link_path)
         
         if not link_path.is_symlink():
@@ -190,7 +190,7 @@ class FileSecurityManager:
             target = link_path.readlink()
             target_resolved = link_path.resolve()
             
-            # Проверяем что ссылка не указывает на системные пути
+            # Check that the symlink does not point to system paths
             target_str = str(target_resolved)
             dangerous_paths = ["/dev", "/proc", "/sys", "/boot"]
             
@@ -201,26 +201,26 @@ class FileSecurityManager:
             return True
             
         except (OSError, RuntimeError):
-            # Битая ссылка или циклическая ссылка
+            # Broken or cyclic symlink
             return False
     
     def sanitize_filename(self, filename: str) -> str:
-        """Санитизация имени файла"""
-        # Убираем опасные символы
+        """Sanitize file name"""
+        # Remove dangerous characters
         dangerous_chars = ['/', '\\', '..', '<', '>', ':', '"', '|', '?', '*']
         sanitized = filename
         
         for char in dangerous_chars:
             sanitized = sanitized.replace(char, '_')
         
-        # Ограничиваем длину
+        # Limit length
         if len(sanitized) > 255:
             sanitized = sanitized[:255]
         
-        # Убираем пробелы в начале и конце
+        # Remove leading and trailing spaces
         sanitized = sanitized.strip()
         
-        # Проверяем что имя не пустое
+        # Ensure name is not empty
         if not sanitized:
             sanitized = "unnamed_file"
         
@@ -228,13 +228,13 @@ class FileSecurityManager:
 
 
 class ProcessSecurityManager:
-    """Менеджер безопасности для операций с процессами"""
+    """Security manager for process operations"""
     
     def __init__(self, config: dict):
         self.config = config
     
     def check_privileges(self) -> dict:
-        """Проверка текущих привилегий"""
+        """Check current privileges"""
         return {
             "uid": os.getuid(),
             "gid": os.getgid(),
@@ -245,10 +245,10 @@ class ProcessSecurityManager:
         }
     
     def require_privileges(self, operation: str) -> bool:
-        """Проверка необходимых привилегий для операции"""
+        """Check required privileges for operation"""
         privileges = self.check_privileges()
         
-        # Операции требующие root
+        # Operations requiring root
         root_operations = ["memory_scan", "keyring_system", "proc_access"]
         
         if operation in root_operations and not privileges["is_root"]:
@@ -257,12 +257,12 @@ class ProcessSecurityManager:
         return True
     
     def is_process_accessible(self, pid: int) -> bool:
-        """Проверка доступности процесса"""
+        """Check process accessibility"""
         try:
-            # Проверяем существование процесса
+            # Check if process exists
             os.kill(pid, 0)
             
-            # Проверяем права доступа к /proc/pid
+            # Check access rights to /proc/pid
             proc_path = f"/proc/{pid}"
             return os.access(proc_path, os.R_OK)
             
