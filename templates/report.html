@@ -354,6 +354,55 @@
             color: #495057;
             line-height: 1.5;
         }
+        .metadata-section {
+            background: #f8f9fa;
+            border-radius: 6px;
+            padding: 12px;
+            margin-top: 10px;
+            font-size: 0.9em;
+        }
+        .metadata-title {
+            font-weight: 600;
+            color: #495057;
+            margin-bottom: 8px;
+        }
+        .json-viewer {
+            background: #2d3748;
+            color: #e2e8f0;
+            border-radius: 4px;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+            overflow-x: auto;
+            margin-top: 10px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .json-key {
+            color: #63b3ed;
+        }
+        .json-string {
+            color: #68d391;
+        }
+        .json-number {
+            color: #fbb6ce;
+        }
+        .json-boolean {
+            color: #fbd38d;
+        }
+        .toggle-json {
+            background: #4a5568;
+            color: white;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-size: 0.8em;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        .toggle-json:hover {
+            background: #2d3748;
+        }
     </style>
 </head>
 <body>
@@ -367,7 +416,36 @@
         <div class="content">
             <div class="breadcrumb">
                 <strong>Scan Summary:</strong> {{ modules_run }} modules executed | {{ total_findings }} total findings
+                {% if execution_stats %}
+                | Execution time: {{ "%.2f"|format(execution_stats.total_execution_time) }}s
+                | Success rate: {{ "%.1f"|format((execution_stats.successful_modules / execution_stats.total_modules) * 100) if execution_stats.total_modules else 0 }}%
+                {% endif %}
             </div>
+            
+            {% if system_info %}
+            <div style="background: #e9ecef; border-radius: 8px; padding: 15px; margin-bottom: 20px; font-size: 0.9em;">
+                <strong>System Information:</strong>
+                {% if system_info.hostname %} Host: {{ system_info.hostname }} |{% endif %}
+                {% if system_info.username %} User: {{ system_info.username }} |{% endif %}
+                {% if system_info.os %} OS: {{ system_info.os }} |{% endif %}
+                {% if system_info.architecture %} Arch: {{ system_info.architecture }}{% endif %}
+                {% if system_info.python_version %} | Python: {{ system_info.python_version }}{% endif %}
+                {% if system_info.platform %} | Platform: {{ system_info.platform }}{% endif %}
+            </div>
+            {% endif %}
+            
+            {% if scan_metadata %}
+            <div style="background: #f0f8ff; border-radius: 8px; padding: 15px; margin-bottom: 20px; font-size: 0.9em;">
+                <strong>Scan Metadata:</strong>
+                Version: {{ scan_metadata.version }} |
+                Report Type: {{ scan_metadata.report_type }} |
+                Generated: {{ scan_metadata.generation_time }}
+                {% if execution_stats and execution_stats.total_modules %}
+                | Modules Requested: {{ execution_stats.total_modules }}
+                | Modules Completed: {{ execution_stats.successful_modules }}
+                {% endif %}
+            </div>
+            {% endif %}
             
             <div class="export-buttons">
                 <button class="export-btn" onclick="window.print()">Print Report</button>
@@ -393,7 +471,37 @@
                         <div class="stat-number">{{ modules_run }}</div>
                         <div class="stat-label">Modules Executed</div>
                     </div>
+                    {% if execution_stats %}
+                    <div class="stat-card">
+                        <div class="stat-number">{{ "%.2f"|format(execution_stats.total_execution_time) }}s</div>
+                        <div class="stat-label">Total Scan Time</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">{{ execution_stats.successful_modules }}</div>
+                        <div class="stat-label">Successful Modules</div>
+                    </div>
+                    {% endif %}
                 </div>
+                
+                {% if execution_stats %}
+                <div class="execution-summary" style="margin-top: 20px; background: #e8f4fd; border-radius: 8px; padding: 15px;">
+                    <h3 style="margin-top: 0; color: #0c5460;">Execution Statistics</h3>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                        <div>
+                            <strong>Total Modules:</strong> {{ execution_stats.total_modules }}<br>
+                            <strong>Successful:</strong> <span style="color: #28a745;">{{ execution_stats.successful_modules }}</span><br>
+                            <strong>Failed:</strong> <span style="color: #dc3545;">{{ execution_stats.failed_modules }}</span><br>
+                            <strong>Skipped:</strong> <span style="color: #ffc107;">{{ execution_stats.skipped_modules }}</span><br>
+                            <strong>Timeout:</strong> <span style="color: #fd7e14;">{{ execution_stats.timeout_modules }}</span>
+                        </div>
+                        <div>
+                            <strong>Total Execution Time:</strong> {{ "%.2f"|format(execution_stats.total_execution_time) }}s<br>
+                            <strong>Average per Module:</strong> {{ "%.2f"|format(execution_stats.total_execution_time / execution_stats.total_modules) }}s<br>
+                            <strong>Success Rate:</strong> {{ "%.1f"|format((execution_stats.successful_modules / execution_stats.total_modules) * 100) }}%
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
                 
                 <div class="explanation-box" style="margin-top: 20px;">
                     <div class="explanation-title">Module Overview - Attack Vectors</div>
@@ -408,12 +516,118 @@
                 </div>
             </div>
 
+            {% if execution_stats and execution_stats.module_details %}
+            <div class="module-execution-details" style="margin-bottom: 30px; background: #f8f9fa; border-radius: 8px; padding: 20px;">
+                <h2>Module Execution Details</h2>
+                <div style="overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse; background: white; border-radius: 6px; overflow: hidden;">
+                        <thead style="background: #6c757d; color: white;">
+                            <tr>
+                                <th style="padding: 12px; text-align: left;">Module</th>
+                                <th style="padding: 12px; text-align: left;">Status</th>
+                                <th style="padding: 12px; text-align: right;">Execution Time</th>
+                                <th style="padding: 12px; text-align: right;">Findings</th>
+                                <th style="padding: 12px; text-align: left;">Details</th>
+                                <th style="padding: 12px; text-align: left;">Timestamp</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for module_name, details in execution_stats.module_details.items() %}
+                            <tr style="border-bottom: 1px solid #e9ecef;">
+                                <td style="padding: 12px; font-weight: 600;">{{ module_name|title }}</td>
+                                <td style="padding: 12px;">
+                                    {% if details.status == 'success' %}
+                                        <span style="color: #28a745; font-weight: 600;">✓ Success</span>
+                                    {% elif details.status == 'failed' %}
+                                        <span style="color: #dc3545; font-weight: 600;">✗ Failed</span>
+                                    {% elif details.status == 'skipped' %}
+                                        <span style="color: #ffc107; font-weight: 600;">⚠ Skipped</span>
+                                    {% elif details.status == 'timeout' %}
+                                        <span style="color: #fd7e14; font-weight: 600;">⏱ Timeout</span>
+                                    {% else %}
+                                        <span style="color: #6c757d;">{{ details.status|title }}</span>
+                                    {% endif %}
+                                </td>
+                                <td style="padding: 12px; text-align: right; font-family: monospace;">
+                                    {{ "%.2f"|format(details.execution_time) }}s
+                                </td>
+                                <td style="padding: 12px; text-align: right;">
+                                    {% if results[module_name] %}
+                                        {% if results[module_name] is mapping %}
+                                            {% set finding_count = namespace(total=0) %}
+                                            {% for key, value in results[module_name].items() %}
+                                                {% if value is sequence and value is not string %}
+                                                    {% set finding_count.total = finding_count.total + value|length %}
+                                                {% elif value %}
+                                                    {% set finding_count.total = finding_count.total + 1 %}
+                                                {% endif %}
+                                            {% endfor %}
+                                            {{ finding_count.total }}
+                                        {% elif results[module_name] is sequence and results[module_name] is not string %}
+                                            {{ results[module_name]|length }}
+                                        {% elif results[module_name] %}
+                                            1
+                                        {% else %}
+                                            0
+                                        {% endif %}
+                                    {% else %}
+                                        0
+                                    {% endif %}
+                                </td>
+                                <td style="padding: 12px; font-size: 0.9em;">
+                                    {% if details.error %}
+                                        <details style="cursor: pointer;">
+                                            <summary style="color: #dc3545;">{{ details.error[:50] }}{% if details.error|length > 50 %}...{% endif %}</summary>
+                                            <pre style="margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 4px; font-size: 0.85em; overflow-x: auto;">{{ details.error }}</pre>
+                                        </details>
+                                    {% elif details.skipped_reason %}
+                                        <span style="color: #6c757d;">{{ details.skipped_reason|replace('_', ' ')|title }}</span>
+                                    {% else %}
+                                        <span style="color: #28a745;">Completed successfully</span>
+                                    {% endif %}
+                                </td>
+                                <td style="padding: 12px; font-size: 0.85em; color: #6c757d;">
+                                    {% if details.timestamp %}
+                                        {{ details.timestamp[:19] }}
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endif %}
+
             {% for module_name, module_data in results.items() %}
             <div class="module">
                 <div class="module-header" onclick="toggleModule('{{ module_name }}')">
-                    <h3>{{ module_name|title }} Module</h3>
+                    <div>
+                        <h3>{{ module_name|title }} Module</h3>
+                        {% if execution_stats and execution_stats.module_details and execution_stats.module_details[module_name] %}
+                        <div style="font-size: 0.8em; opacity: 0.9; margin-top: 4px;">
+                            Status: {{ execution_stats.module_details[module_name].status|title }} | 
+                            Time: {{ "%.2f"|format(execution_stats.module_details[module_name].execution_time) }}s
+                            {% if execution_stats.module_details[module_name].timestamp %}
+                            | Executed: {{ execution_stats.module_details[module_name].timestamp[:19] }}
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                    </div>
                     <div class="module-count">
-                        {% if module_data is sequence and module_data is not string %}
+                        {% if module_data is mapping %}
+                            {% set ns = namespace(count=0) %}
+                            {% for key, value in module_data.items() %}
+                                {% if value is mapping and 'items' in value and value['items'] is sequence %}
+                                    {% set ns.count = ns.count + value['items']|length %}
+                                {% elif value is sequence and value is not string %}
+                                    {% set ns.count = ns.count + value|length %}
+                                {% endif %}
+                            {% endfor %}
+                            {{ ns.count }} findings
+                        {% elif module_data is sequence and module_data is not string %}
                             {{ module_data|length }} findings
                         {% elif module_data %}
                             1 finding
@@ -424,7 +638,683 @@
                 </div>
                 <div class="module-content" id="{{ module_name }}">
                     {% if module_data %}
-                        {% if module_data is sequence and module_data is not string %}
+                        {% if module_name == 'ssh' and module_data is mapping %}
+                            <!-- Special handling for SSH module -->
+                            {% if module_data.private_keys %}
+                                <h4 style="margin-top: 20px;">Private Keys ({{ module_data.private_keys|length }})</h4>
+                                {% for key in module_data.private_keys %}
+                                <div class="finding {% if not key.encrypted %}critical{% else %}warning{% endif %}">
+                                    <h4>
+                                        <span>
+                                            <span class="severity-indicator severity-{% if not key.encrypted %}critical{% else %}warning{% endif %}"></span>
+                                            <span class="ssh-icon icon-private-key"></span>
+                                            Private Key: {{ key.path|default('Unknown', true) }}
+                                        </span>
+                                        <span>
+                                            <button class="export-btn" style="font-size: 0.8em; padding: 4px 8px; margin-right: 10px;" data-finding-type="ssh_private_key" onclick="toggleExplanation(this)">
+                                                Show Explanation
+                                            </button>
+                                            <span class="risk-badge risk-{% if not key.encrypted %}high{% else %}medium{% endif %}">
+                                                {% if not key.encrypted %}High Risk{% else %}Medium Risk{% endif %}
+                                            </span>
+                                        </span>
+                                    </h4>
+                                    <div class="ssh-key-info ssh-private-key">
+                                        <div class="finding-details">
+                                            <div class="detail-row">
+                                                <span class="detail-label">Path:</span>
+                                                <span class="detail-value">{{ key.path|default('Unknown', true) }}</span>
+                                            </div>
+                                            <div class="detail-row">
+                                                <span class="detail-label">Encrypted:</span>
+                                                <span class="detail-value">
+                                                    {% if key.encrypted %}
+                                                        <span style="color: #28a745;">✓ Yes</span>
+                                                    {% else %}
+                                                        <span style="color: #dc3545;">✗ No (Immediate Access!)</span>
+                                                    {% endif %}
+                                                </span>
+                                            </div>
+                                            <div class="detail-row">
+                                                <span class="detail-label">Permissions:</span>
+                                                <span class="detail-value">
+                                                    {% if key.secure_permissions %}
+                                                        <span style="color: #28a745;">✓ Secure ({{ key.permissions|default('Unknown', true) }})</span>
+                                                    {% else %}
+                                                        <span style="color: #dc3545;">✗ Insecure ({{ key.permissions|default('Unknown', true) }})</span>
+                                                    {% endif %}
+                                                </span>
+                                            </div>
+                                            {% if key.size %}
+                                            <div class="detail-row">
+                                                <span class="detail-label">Size:</span>
+                                                <span class="detail-value">{{ key.size }} bytes</span>
+                                            </div>
+                                            {% endif %}
+                                            {% if key.owner %}
+                                            <div class="detail-row">
+                                                <span class="detail-label">Owner:</span>
+                                                <span class="detail-value">{{ key.owner }}</span>
+                                            </div>
+                                            {% endif %}
+                                            {% if key.group %}
+                                            <div class="detail-row">
+                                                <span class="detail-label">Group:</span>
+                                                <span class="detail-value">{{ key.group }}</span>
+                                            </div>
+                                            {% endif %}
+                                            {% if key.modified %}
+                                            <div class="detail-row">
+                                                <span class="detail-label">Last Modified:</span>
+                                                <span class="detail-value">{{ key.modified }}</span>
+                                            </div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            {% endif %}
+                            
+                            {% if module_data.public_keys %}
+                                <h4 style="margin-top: 20px;">Public Keys ({{ module_data.public_keys|length }})</h4>
+                                {% for key in module_data.public_keys %}
+                                <div class="finding info">
+                                    <h4>
+                                        <span>
+                                            <span class="severity-indicator severity-info"></span>
+                                            <span class="ssh-icon icon-public-key"></span>
+                                            Public Key: {{ key.path|default('Unknown', true) }}
+                                        </span>
+                                    </h4>
+                                    <div class="ssh-key-info ssh-public-key">
+                                        <div class="finding-details">
+                                            <div class="detail-row">
+                                                <span class="detail-label">Path:</span>
+                                                <span class="detail-value">{{ key.path|default('Unknown', true) }}</span>
+                                            </div>
+                                            {% if key.key_type %}
+                                            <div class="detail-row">
+                                                <span class="detail-label">Key Type:</span>
+                                                <span class="detail-value">{{ key.key_type }}</span>
+                                            </div>
+                                            {% endif %}
+                                            {% if key.fingerprint %}
+                                            <div class="detail-row">
+                                                <span class="detail-label">Fingerprint:</span>
+                                                <span class="detail-value" style="font-family: monospace;">{{ key.fingerprint }}</span>
+                                            </div>
+                                            {% endif %}
+                                            {% if key.comment %}
+                                            <div class="detail-row">
+                                                <span class="detail-label">Comment:</span>
+                                                <span class="detail-value">{{ key.comment }}</span>
+                                            </div>
+                                            {% endif %}
+                                            {% if key.size %}
+                                            <div class="detail-row">
+                                                <span class="detail-label">Size:</span>
+                                                <span class="detail-value">{{ key.size }} bytes</span>
+                                            </div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            {% endif %}
+                            
+                            {% if module_data.authorized_keys %}
+                                <h4 style="margin-top: 20px;">Authorized Keys Files ({{ module_data.authorized_keys|length }})</h4>
+                                {% for auth_file in module_data.authorized_keys %}
+                                <div class="finding warning">
+                                    <h4>
+                                        <span>
+                                            <span class="severity-indicator severity-warning"></span>
+                                            <span class="ssh-icon icon-public-key"></span>
+                                            Authorized Keys: {{ auth_file.path|default('Unknown', true) }}
+                                        </span>
+                                    </h4>
+                                    <div class="ssh-key-info">
+                                        <div class="finding-details">
+                                            <div class="detail-row">
+                                                <span class="detail-label">Path:</span>
+                                                <span class="detail-value">{{ auth_file.path|default('Unknown', true) }}</span>
+                                            </div>
+                                            <div class="detail-row">
+                                                <span class="detail-label">Key Count:</span>
+                                                <span class="detail-value">{{ auth_file.keys|length if auth_file.keys else 0 }} keys</span>
+                                            </div>
+                                            {% if auth_file.owner %}
+                                            <div class="detail-row">
+                                                <span class="detail-label">Owner:</span>
+                                                <span class="detail-value">{{ auth_file.owner }}</span>
+                                            </div>
+                                            {% endif %}
+                                            {% if auth_file.keys %}
+                                            <div class="detail-row">
+                                                <span class="detail-label">Authorized Keys:</span>
+                                                <div style="margin-top: 10px;">
+                                                    {% for authkey in auth_file.keys %}
+                                                    <div style="background: #f8f9fa; padding: 8px; margin: 4px 0; border-radius: 4px; font-size: 0.9em;">
+                                                        <strong>{{ authkey.key_type|default('Unknown', true) }}</strong>
+                                                        {% if authkey.comment %} - {{ authkey.comment }}{% endif %}
+                                                        {% if authkey.fingerprint %}<br><span style="font-family: monospace; font-size: 0.85em;">{{ authkey.fingerprint }}</span>{% endif %}
+                                                    </div>
+                                                    {% endfor %}
+                                                </div>
+                                            </div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            {% endif %}
+                            
+                            {% if module_data.ssh_agent %}
+                                <h4 style="margin-top: 20px;">SSH Agent Status</h4>
+                                <div class="finding {% if module_data.ssh_agent.identities %}critical{% else %}info{% endif %}">
+                                    <h4>
+                                        <span>
+                                            <span class="severity-indicator severity-{% if module_data.ssh_agent.identities %}critical{% else %}info{% endif %}"></span>
+                                            <span class="ssh-icon icon-agent"></span>
+                                            SSH Agent
+                                        </span>
+                                    </h4>
+                                    <div class="ssh-key-info ssh-agent">
+                                        <div class="finding-details">
+                                            <div class="detail-row">
+                                                <span class="detail-label">Status:</span>
+                                                <span class="detail-value">
+                                                    {% if module_data.ssh_agent.running %}
+                                                        <span style="color: #28a745;">✓ Running</span>
+                                                    {% else %}
+                                                        <span style="color: #6c757d;">Not Running</span>
+                                                    {% endif %}
+                                                </span>
+                                            </div>
+                                            {% if module_data.ssh_agent.socket %}
+                                            <div class="detail-row">
+                                                <span class="detail-label">Socket:</span>
+                                                <span class="detail-value">{{ module_data.ssh_agent.socket }}</span>
+                                            </div>
+                                            {% endif %}
+                                            {% if module_data.ssh_agent.identities %}
+                                            <div class="detail-row">
+                                                <span class="detail-label">Loaded Identities:</span>
+                                                <span class="detail-value">{{ module_data.ssh_agent.identities|length }}</span>
+                                            </div>
+                                            {% for identity in module_data.ssh_agent.identities %}
+                                            <div style="background: #f8f9fa; padding: 10px; margin: 10px 0; border-radius: 4px;">
+                                                <div class="detail-row">
+                                                    <span class="detail-label">Fingerprint:</span>
+                                                    <span class="detail-value" style="font-family: monospace;">{{ identity.fingerprint|default('Unknown', true) }}</span>
+                                                </div>
+                                                {% if identity.key_type %}
+                                                <div class="detail-row">
+                                                    <span class="detail-label">Type:</span>
+                                                    <span class="detail-value">{{ identity.key_type }}</span>
+                                                </div>
+                                                {% endif %}
+                                                {% if identity.comment %}
+                                                <div class="detail-row">
+                                                    <span class="detail-label">Comment:</span>
+                                                    <span class="detail-value">{{ identity.comment }}</span>
+                                                </div>
+                                                {% endif %}
+                                            </div>
+                                            {% endfor %}
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endif %}
+                            
+                            {% if module_data.config_files %}
+                                <h4 style="margin-top: 20px;">SSH Config Files ({{ module_data.config_files|length }})</h4>
+                                {% for config in module_data.config_files %}
+                                <div class="finding info">
+                                    <h4>
+                                        <span>
+                                            <span class="severity-indicator severity-info"></span>
+                                            <span class="ssh-icon icon-config"></span>
+                                            Config: {{ config.path|default('Unknown', true) }}
+                                        </span>
+                                    </h4>
+                                    <div class="ssh-key-info">
+                                        <div class="finding-details">
+                                            <div class="detail-row">
+                                                <span class="detail-label">Path:</span>
+                                                <span class="detail-value">{{ config.path|default('Unknown', true) }}</span>
+                                            </div>
+                                            {% if config.configs %}
+                                            <div class="detail-row">
+                                                <span class="detail-label">Configurations:</span>
+                                                <div style="margin-top: 10px;">
+                                                    {% for cfg in config.configs %}
+                                                    <div style="background: #f8f9fa; padding: 8px; margin: 4px 0; border-radius: 4px; font-family: monospace; font-size: 0.9em;">
+                                                        {{ cfg }}
+                                                    </div>
+                                                    {% endfor %}
+                                                </div>
+                                            </div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            {% endif %}
+                            
+                            {% if module_data.known_hosts %}
+                                <h4 style="margin-top: 20px;">Known Hosts Files ({{ module_data.known_hosts|length }})</h4>
+                                {% for known in module_data.known_hosts %}
+                                <div class="finding warning">
+                                    <h4>
+                                        <span>
+                                            <span class="severity-indicator severity-warning"></span>
+                                            <span class="ssh-icon icon-known-hosts"></span>
+                                            Known Hosts: {{ known.path|default('Unknown', true) }}
+                                        </span>
+                                    </h4>
+                                    <div class="ssh-key-info">
+                                        <div class="finding-details">
+                                            <div class="detail-row">
+                                                <span class="detail-label">Path:</span>
+                                                <span class="detail-value">{{ known.path|default('Unknown', true) }}</span>
+                                            </div>
+                                            <div class="detail-row">
+                                                <span class="detail-label">Host Count:</span>
+                                                <span class="detail-value">{{ known.count|default(0, true) }} hosts</span>
+                                            </div>
+                                            {% if known.hosts %}
+                                            <div class="detail-row">
+                                                <span class="detail-label">Sample Hosts:</span>
+                                                <div style="margin-top: 10px;">
+                                                    {% for host in known.hosts[:5] %}
+                                                    <div style="background: #f8f9fa; padding: 4px 8px; margin: 2px 0; border-radius: 4px; font-family: monospace; font-size: 0.9em;">
+                                                        {{ host }}
+                                                    </div>
+                                                    {% endfor %}
+                                                    {% if known.hosts|length > 5 %}
+                                                    <div style="color: #6c757d; font-style: italic; margin-top: 4px;">
+                                                        ... and {{ known.hosts|length - 5 }} more hosts
+                                                    </div>
+                                                    {% endif %}
+                                                </div>
+                                            </div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            {% endif %}
+                            
+                        {% elif module_name == 'browser' and module_data is mapping %}
+                            <!-- Special handling for Browser module -->
+                            {% for browser_type, browser_data in module_data.items() %}
+                                {% if browser_data and browser_data is mapping %}
+                                    <h4 style="margin-top: 20px;">{{ browser_type|title }} Browser</h4>
+                                    
+                                    {% if browser_data.passwords %}
+                                        <h5>Saved Passwords ({{ browser_data.passwords|length }})</h5>
+                                        {% for password in browser_data.passwords %}
+                                        <div class="finding critical">
+                                            <h4>
+                                                <span>
+                                                    <span class="severity-indicator severity-critical"></span>
+                                                    <span class="ssh-icon icon-browser-credential"></span>
+                                                    {{ password.url|default('Unknown URL', true) }}
+                                                </span>
+                                            </h4>
+                                            <div class="ssh-key-info browser-info">
+                                                <div class="finding-details">
+                                                    <div class="detail-row">
+                                                        <span class="detail-label">URL:</span>
+                                                        <span class="detail-value">{{ password.url|default('Unknown', true) }}</span>
+                                                    </div>
+                                                    <div class="detail-row">
+                                                        <span class="detail-label">Username:</span>
+                                                        <span class="detail-value">{{ password.username|default('Unknown', true) }}</span>
+                                                    </div>
+                                                    <div class="detail-row">
+                                                        <span class="detail-label">Password:</span>
+                                                        <span class="detail-value">
+                                                            {% if password.decrypted %}
+                                                                <span style="color: #28a745;">✓ Decrypted Successfully</span>
+                                                                <button class="toggle-json" style="margin-left: 10px; font-size: 0.7em; padding: 2px 6px;" onclick="togglePassword(this, '{{ password.password|e }}')">Show</button>
+                                                            {% elif password.encrypted %}
+                                                                <span style="color: #ffc107;">⚠ Encrypted (install pycryptodome to decrypt)</span>
+                                                            {% else %}
+                                                                <span style="color: #6c757d;">No password stored</span>
+                                                            {% endif %}
+                                                        </span>
+                                                    </div>
+                                                    {% if password.date_created %}
+                                                    <div class="detail-row">
+                                                        <span class="detail-label">Created:</span>
+                                                        <span class="detail-value">{{ password.date_created }}</span>
+                                                    </div>
+                                                    {% endif %}
+                                                    {% if password.date_last_used %}
+                                                    <div class="detail-row">
+                                                        <span class="detail-label">Last Used:</span>
+                                                        <span class="detail-value">{{ password.date_last_used }}</span>
+                                                    </div>
+                                                    {% endif %}
+                                                    <div class="detail-row">
+                                                        <span class="detail-label">Profile:</span>
+                                                        <span class="detail-value">{{ password.profile_path|default('Unknown', true) }}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {% endfor %}
+                                    {% endif %}
+                                    
+                                    {% if browser_data.cookies %}
+                                        <h5>Cookies ({{ browser_data.cookies|length }})</h5>
+                                        {% for cookie in browser_data.cookies[:10] %}
+                                        <div class="finding warning">
+                                            <h4>
+                                                <span>
+                                                    <span class="severity-indicator severity-warning"></span>
+                                                    <span class="ssh-icon icon-browser-credential"></span>
+                                                    {{ cookie.host|default('Unknown Host', true) }} - {{ cookie.name|default('Unknown', true) }}
+                                                </span>
+                                            </h4>
+                                            <div class="ssh-key-info browser-info">
+                                                <div class="finding-details">
+                                                    <div class="detail-row">
+                                                        <span class="detail-label">Host:</span>
+                                                        <span class="detail-value">{{ cookie.host|default('Unknown', true) }}</span>
+                                                    </div>
+                                                    <div class="detail-row">
+                                                        <span class="detail-label">Cookie Name:</span>
+                                                        <span class="detail-value">{{ cookie.name|default('Unknown', true) }}</span>
+                                                    </div>
+                                                    <div class="detail-row">
+                                                        <span class="detail-label">Value:</span>
+                                                        <span class="detail-value">
+                                                            {% if cookie.value %}
+                                                                <span style="color: #dc3545;">***HIDDEN***</span>
+                                                            {% else %}
+                                                                <span style="color: #6c757d;">No value</span>
+                                                            {% endif %}
+                                                        </span>
+                                                    </div>
+                                                    <div class="detail-row">
+                                                        <span class="detail-label">Secure:</span>
+                                                        <span class="detail-value">{{ cookie.secure|default(false, true) }}</span>
+                                                    </div>
+                                                    <div class="detail-row">
+                                                        <span class="detail-label">HTTP Only:</span>
+                                                        <span class="detail-value">{{ cookie.httponly|default(false, true) }}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {% endfor %}
+                                        {% if browser_data.cookies|length > 10 %}
+                                        <div style="text-align: center; color: #6c757d; font-style: italic; margin: 10px 0;">
+                                            ... and {{ browser_data.cookies|length - 10 }} more cookies
+                                        </div>
+                                        {% endif %}
+                                    {% endif %}
+                                    
+                                    {% if browser_data.autofill %}
+                                        <h5>Autofill Data ({{ browser_data.autofill|length }})</h5>
+                                        {% for autofill in browser_data.autofill[:5] %}
+                                        <div class="finding info">
+                                            <h4>
+                                                <span>
+                                                    <span class="severity-indicator severity-info"></span>
+                                                    {{ autofill.field_name|default('Unknown Field', true) }}
+                                                </span>
+                                            </h4>
+                                            <div class="finding-details">
+                                                <div class="detail-row">
+                                                    <span class="detail-label">Field:</span>
+                                                    <span class="detail-value">{{ autofill.field_name|default('Unknown', true) }}</span>
+                                                </div>
+                                                <div class="detail-row">
+                                                    <span class="detail-label">Value:</span>
+                                                    <span class="detail-value">{{ autofill.value|default('Unknown', true) }}</span>
+                                                </div>
+                                                <div class="detail-row">
+                                                    <span class="detail-label">Usage Count:</span>
+                                                    <span class="detail-value">{{ autofill.usage_count|default(0, true) }}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {% endfor %}
+                                        {% if browser_data.autofill|length > 5 %}
+                                        <div style="text-align: center; color: #6c757d; font-style: italic; margin: 10px 0;">
+                                            ... and {{ browser_data.autofill|length - 5 }} more autofill entries
+                                        </div>
+                                        {% endif %}
+                                    {% endif %}
+                                {% endif %}
+                            {% endfor %}
+                            
+                        {% elif module_name == 'keyring' and module_data is mapping %}
+                            <!-- Special handling for keyring module -->
+                            {% for keyring_type, keyring_data in module_data.items() %}
+                                {% if keyring_type != 'available_keyrings' and keyring_data and keyring_data is mapping %}
+                                    {% if keyring_data['items'] and keyring_data['items']|length > 0 %}
+                                        <h4 style="margin-top: 20px;">{{ keyring_type|replace('_', ' ')|title }} ({{ keyring_data['items']|length }} entries)</h4>
+                                        {% for item in keyring_data['items'] %}
+                                        <div class="finding critical">
+                                            <h4>
+                                                <span>
+                                                    <span class="severity-indicator severity-critical"></span>
+                                                    <span class="ssh-icon icon-keyring-entry"></span>
+                                                    {% if item.attributes and item.attributes.service %}
+                                                        {{ item.attributes.service }}
+                                                    {% elif item.key %}
+                                                        {{ item.key }}
+                                                    {% else %}
+                                                        Keyring Entry #{{ loop.index }}
+                                                    {% endif %}
+                                                </span>
+                                                <button class="export-btn" style="font-size: 0.8em; padding: 4px 8px; margin-right: 10px;" data-finding-type="keyring_entry" onclick="toggleExplanation(this)">
+                                                    Show Explanation
+                                                </button>
+                                            </h4>
+                                            <div class="ssh-key-info keyring-info">
+                                                <div class="finding-details">
+                                                    {% if item.attributes %}
+                                                        {% if item.attributes.service %}
+                                                        <div class="detail-row">
+                                                            <span class="detail-label">Service:</span>
+                                                            <span class="detail-value">{{ item.attributes.service }}</span>
+                                                        </div>
+                                                        {% endif %}
+                                                        {% if item.attributes.username %}
+                                                        <div class="detail-row">
+                                                            <span class="detail-label">Username:</span>
+                                                            <span class="detail-value">{{ item.attributes.username }}</span>
+                                                        </div>
+                                                        {% endif %}
+                                                        {% if item.attributes.account %}
+                                                        <div class="detail-row">
+                                                            <span class="detail-label">Account:</span>
+                                                            <span class="detail-value">{{ item.attributes.account }}</span>
+                                                        </div>
+                                                        {% endif %}
+                                                        {% if item.attributes.url %}
+                                                        <div class="detail-row">
+                                                            <span class="detail-label">URL:</span>
+                                                            <span class="detail-value">{{ item.attributes.url }}</span>
+                                                        </div>
+                                                        {% endif %}
+                                                    {% endif %}
+                                                    {% if item.secret %}
+                                                    <div class="detail-row">
+                                                        <span class="detail-label">Secret:</span>
+                                                        <span class="detail-value">
+                                                            <span style="color: #dc3545;">***HIDDEN***</span>
+                                                            <button class="toggle-json" style="margin-left: 10px; font-size: 0.7em; padding: 2px 6px;" onclick="togglePassword(this, '{{ item.secret|e }}')">Show</button>
+                                                        </span>
+                                                    </div>
+                                                    {% elif item.value %}
+                                                    <div class="detail-row">
+                                                        <span class="detail-label">Value:</span>
+                                                        <span class="detail-value">
+                                                            <span style="color: #dc3545;">***HIDDEN***</span>
+                                                            <button class="toggle-json" style="margin-left: 10px; font-size: 0.7em; padding: 2px 6px;" onclick="togglePassword(this, '{{ item.value|e }}')">Show</button>
+                                                        </span>
+                                                    </div>
+                                                    {% endif %}
+                                                    {% if item.key %}
+                                                    <div class="detail-row">
+                                                        <span class="detail-label">Key:</span>
+                                                        <span class="detail-value">{{ item.key }}</span>
+                                                    </div>
+                                                    {% endif %}
+                                                    {% if item.label %}
+                                                    <div class="detail-row">
+                                                        <span class="detail-label">Label:</span>
+                                                        <span class="detail-value">{{ item.label }}</span>
+                                                    </div>
+                                                    {% endif %}
+                                                    {% if item.attributes %}
+                                                        {% for attr_key, attr_value in item.attributes.items() %}
+                                                            {% if attr_key not in ['service', 'username', 'account', 'url'] %}
+                                                            <div class="detail-row">
+                                                                <span class="detail-label">{{ attr_key|replace('_', ' ')|title }}:</span>
+                                                                <span class="detail-value">{{ attr_value }}</span>
+                                                            </div>
+                                                            {% endif %}
+                                                        {% endfor %}
+                                                    {% endif %}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {% endfor %}
+                                    {% elif keyring_data.error %}
+                                        <h4 style="margin-top: 20px;">{{ keyring_type|replace('_', ' ')|title }}</h4>
+                                        <div class="finding warning">
+                                            <h4>
+                                                <span>
+                                                    <span class="severity-indicator severity-warning"></span>
+                                                    Error accessing {{ keyring_type|replace('_', ' ') }}
+                                                </span>
+                                            </h4>
+                                            <div class="finding-details">
+                                                <div class="detail-row">
+                                                    <span class="detail-label">Error:</span>
+                                                    <span class="detail-value">{{ keyring_data.error }}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    {% endif %}
+                                {% endif %}
+                            {% endfor %}
+                            {% if module_data.available_keyrings %}
+                                <div style="margin-top: 20px; background: #e8f4fd; border-radius: 8px; padding: 15px;">
+                                    <strong>Available Keyrings:</strong> {{ module_data.available_keyrings|join(', ') }}
+                                </div>
+                            {% endif %}
+                            
+                        {% elif module_name == 'dotfiles' and module_data is mapping %}
+                            <!-- Special handling for dotfiles module with nested categories -->
+                            {% for category_name, category_findings in module_data.items() %}
+                                {% if category_findings and category_findings|length > 0 %}
+                                    <h4 style="margin-top: 20px;">{{ category_name|replace('_', ' ')|title }} ({{ category_findings|length }})</h4>
+                                    {% for finding in category_findings %}
+                                        <div class="finding {% if finding.pattern_matches %}critical{% else %}info{% endif %}">
+                                            <h4>
+                                                <span>
+                                                    <span class="severity-indicator severity-{% if finding.pattern_matches %}critical{% else %}info{% endif %}"></span>
+                                                    <span class="ssh-icon icon-dotfile-{% if finding.pattern_matches %}credential{% else %}config{% endif %}"></span>
+                                                    {{ finding.file|default('Unknown File', true) }}
+                                                </span>
+                                                <button class="export-btn" style="font-size: 0.8em; padding: 4px 8px; margin-right: 10px;" data-finding-type="dotfile_{% if finding.pattern_matches %}credential{% else %}config{% endif %}" onclick="toggleExplanation(this)">
+                                                    Show Explanation
+                                                </button>
+                                            </h4>
+                                            <div class="ssh-key-info dotfile-info">
+                                                <div class="finding-details">
+                                                    <div class="detail-row">
+                                                        <span class="detail-label">File:</span>
+                                                        <span class="detail-value">{{ finding.file|default('Unknown', true) }}</span>
+                                                    </div>
+                                                    <div class="detail-row">
+                                                        <span class="detail-label">Type:</span>
+                                                        <span class="detail-value">{{ finding.type|default('Unknown', true) }}</span>
+                                                    </div>
+                                                    {% if finding.pattern_matches %}
+                                                        <div class="detail-row">
+                                                            <span class="detail-label">Pattern Matches:</span>
+                                                            <span class="detail-value">{{ finding.pattern_matches|length }} matches found</span>
+                                                        </div>
+                                                        {% for match in finding.pattern_matches[:3] %}
+                                                        <div style="background: #f8f9fa; padding: 10px; margin: 10px 0; border-radius: 4px;">
+                                                            <div class="detail-row">
+                                                                <span class="detail-label">Match Type:</span>
+                                                                <span class="detail-value">{{ match.type|default('Unknown', true) }}</span>
+                                                            </div>
+                                                            <div class="detail-row">
+                                                                <span class="detail-label">Pattern:</span>
+                                                                <span class="detail-value" style="font-family: monospace;">{{ match.pattern|default('Unknown', true) }}</span>
+                                                            </div>
+                                                            <div class="detail-row">
+                                                                <span class="detail-label">Found:</span>
+                                                                <span class="detail-value" style="color: #dc3545; font-family: monospace;">{{ match.match|default('Unknown', true) }}</span>
+                                                            </div>
+                                                            {% if match.context %}
+                                                            <div class="detail-row">
+                                                                <span class="detail-label">Context:</span>
+                                                                <span class="detail-value" style="font-family: monospace; font-size: 0.9em;">{{ match.context }}</span>
+                                                            </div>
+                                                            {% endif %}
+                                                        </div>
+                                                        {% endfor %}
+                                                        {% if finding.pattern_matches|length > 3 %}
+                                                        <div style="text-align: center; color: #6c757d; font-style: italic;">
+                                                            ... and {{ finding.pattern_matches|length - 3 }} more matches
+                                                        </div>
+                                                        {% endif %}
+                                                    {% endif %}
+                                                    {% if finding.config %}
+                                                        <div class="detail-row">
+                                                            <span class="detail-label">Configuration:</span>
+                                                            <div class="json-viewer" style="display: block; margin-top: 10px;">
+                                                                <pre>{{ finding.config|tojson(indent=2) }}</pre>
+                                                            </div>
+                                                        </div>
+                                                    {% endif %}
+                                                    {% if finding.variables %}
+                                                        <div class="detail-row">
+                                                            <span class="detail-label">Environment Variables:</span>
+                                                            <div style="margin-top: 10px;">
+                                                                {% for var in finding.variables[:5] %}
+                                                                <div style="background: #f8f9fa; padding: 4px 8px; margin: 2px 0; border-radius: 4px; font-family: monospace;">
+                                                                    <strong>{{ var.key }}</strong> = {{ var.value[:50] }}{% if var.value|length > 50 %}...{% endif %}
+                                                                </div>
+                                                                {% endfor %}
+                                                                {% if finding.variables|length > 5 %}
+                                                                <div style="color: #6c757d; font-style: italic;">
+                                                                    ... and {{ finding.variables|length - 5 }} more variables
+                                                                </div>
+                                                                {% endif %}
+                                                            </div>
+                                                        </div>
+                                                    {% endif %}
+                                                    {% if finding.content_preview %}
+                                                        <div class="detail-row">
+                                                            <span class="detail-label">Content Preview:</span>
+                                                            <div class="code" style="margin-top: 10px; max-height: 200px; overflow-y: auto;">
+                                                                {{ finding.content_preview }}
+                                                            </div>
+                                                        </div>
+                                                    {% endif %}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    {% endfor %}
+                                {% endif %}
+                            {% endfor %}
+                            
+                        {% elif module_data is sequence and module_data is not string %}
                             {% for finding in module_data %}
                             <div class="finding {% if finding is mapping and finding.get('severity') == 'critical' %}critical{% elif finding is mapping and finding.get('severity') == 'warning' %}warning{% elif finding is mapping and finding.get('severity') == 'info' %}info{% else %}warning{% endif %}">
                                 <h4>
@@ -658,8 +1548,114 @@
                                 {% else %}
                                     <div class="code">{{ finding|tojson(indent=2) }}</div>
                                 {% endif %}
+                                
+                                <!-- Enhanced metadata section for all findings -->
+                                <div class="metadata-section">
+                                    <div class="metadata-title">Technical Metadata</div>
+                                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; font-size: 0.85em;">
+                                        {% if finding is mapping %}
+                                            <div><strong>Finding Type:</strong> {{ finding.get('type', 'unknown') }}</div>
+                                            <div><strong>Severity:</strong> 
+                                                {% if finding.get('severity') == 'critical' %}
+                                                    <span style="color: #dc3545;">{{ finding.get('severity', 'info')|title }}</span>
+                                                {% elif finding.get('severity') == 'warning' %}
+                                                    <span style="color: #ffc107;">{{ finding.get('severity', 'info')|title }}</span>
+                                                {% else %}
+                                                    <span style="color: #17a2b8;">{{ finding.get('severity', 'info')|title }}</span>
+                                                {% endif %}
+                                            </div>
+                                            {% if finding.get('risk_level') %}
+                                            <div><strong>Risk Level:</strong> {{ finding.get('risk_level') }}</div>
+                                            {% endif %}
+                                            {% if finding.get('encrypted') is not none %}
+                                            <div><strong>Encrypted:</strong> 
+                                                {% if finding.get('encrypted') %}
+                                                    <span style="color: #28a745;">Yes</span>
+                                                {% else %}
+                                                    <span style="color: #dc3545;">No</span>
+                                                {% endif %}
+                                            </div>
+                                            {% endif %}
+                                            {% if finding.get('size') %}
+                                            <div><strong>Size:</strong> {{ finding.get('size') }} bytes</div>
+                                            {% endif %}
+                                            {% if finding.get('permissions') %}
+                                            <div><strong>Permissions:</strong> {{ finding.get('permissions') }}</div>
+                                            {% endif %}
+                                            {% if finding.get('owner') %}
+                                            <div><strong>Owner:</strong> {{ finding.get('owner') }}</div>
+                                            {% endif %}
+                                        {% else %}
+                                            <div><strong>Data Type:</strong> {{ finding.__class__.__name__ }}</div>
+                                        {% endif %}
+                                    </div>
+                                    
+                                    <!-- Raw JSON viewer -->
+                                    <button class="toggle-json" onclick="toggleJson(this)">Show Raw JSON</button>
+                                    <div class="json-viewer" style="display: none;">
+                                        <pre>{{ finding | tojson(indent=2) }}</pre>
+                                    </div>
+                                </div>
                             </div>
                             {% endfor %}
+                        {% elif module_data is mapping %}
+                            <!-- Handle any module that returns a dictionary with categories -->
+                            {% set has_findings = false %}
+                            {% for category_name, category_data in module_data.items() %}
+                                {% if category_data and (category_data is sequence or category_data is mapping) and category_data|length > 0 %}
+                                    {% set has_findings = true %}
+                                    <h4 style="margin-top: 20px;">{{ category_name|replace('_', ' ')|title }} ({{ category_data|length if category_data is sequence else 1 }})</h4>
+                                    
+                                    {% if category_data is sequence %}
+                                        {% for item in category_data %}
+                                            <div class="finding info">
+                                                <h4>
+                                                    <span>
+                                                        <span class="severity-indicator severity-info"></span>
+                                                        {{ category_name|replace('_', ' ')|title }} Item #{{ loop.index }}
+                                                    </span>
+                                                </h4>
+                                                <div class="finding-details">
+                                                    {% if item is mapping %}
+                                                        {% for key, value in item.items() %}
+                                                        <div class="detail-row">
+                                                            <span class="detail-label">{{ key|replace('_', ' ')|title }}:</span>
+                                                            <span class="detail-value">
+                                                                {% if value is mapping or value is sequence %}
+                                                                    <pre style="margin: 5px 0;">{{ value|tojson(indent=2) }}</pre>
+                                                                {% else %}
+                                                                    {{ value }}
+                                                                {% endif %}
+                                                            </span>
+                                                        </div>
+                                                        {% endfor %}
+                                                    {% else %}
+                                                        <div class="code">{{ item|tojson(indent=2) }}</div>
+                                                    {% endif %}
+                                                </div>
+                                            </div>
+                                        {% endfor %}
+                                    {% else %}
+                                        <div class="finding info">
+                                            <h4>
+                                                <span>
+                                                    <span class="severity-indicator severity-info"></span>
+                                                    {{ category_name|replace('_', ' ')|title }}
+                                                </span>
+                                            </h4>
+                                            <div class="code">{{ category_data|tojson(indent=2) }}</div>
+                                        </div>
+                                    {% endif %}
+                                {% endif %}
+                            {% endfor %}
+                            
+                            {% if not has_findings %}
+                                <div class="no-findings">
+                                    <strong>No findings in this module</strong><br>
+                                    This module completed successfully but found no credentials or secrets.
+                                </div>
+                            {% endif %}
+                            
                         {% else %}
                             <div class="finding info">
                                 <h4>
@@ -810,6 +1806,41 @@
             } else {
                 addExplanationToFinding(findingElement, findingType);
                 button.textContent = 'Hide Explanation';
+            }
+        }
+
+        function toggleJson(button) {
+            const jsonViewer = button.nextElementSibling;
+            if (jsonViewer.style.display === 'none') {
+                jsonViewer.style.display = 'block';
+                button.textContent = 'Hide Raw JSON';
+            } else {
+                jsonViewer.style.display = 'none';
+                button.textContent = 'Show Raw JSON';
+            }
+        }
+        
+        function togglePassword(button, password) {
+            const parent = button.parentElement;
+            const passwordSpan = parent.querySelector('.password-value');
+            
+            if (!passwordSpan) {
+                // Create password display element
+                const span = document.createElement('span');
+                span.className = 'password-value';
+                span.style.cssText = 'display: block; margin-top: 5px; font-family: monospace; background: #f8f9fa; padding: 4px 8px; border-radius: 4px; word-break: break-all;';
+                span.textContent = password;
+                parent.appendChild(span);
+                button.textContent = 'Hide';
+            } else {
+                // Toggle visibility
+                if (passwordSpan.style.display === 'none') {
+                    passwordSpan.style.display = 'block';
+                    button.textContent = 'Hide';
+                } else {
+                    passwordSpan.style.display = 'none';
+                    button.textContent = 'Show';
+                }
             }
         }
 

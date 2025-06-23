@@ -7,8 +7,13 @@ Generates reports in JSON, HTML, CSV, and console formats
 import os
 import json
 import csv
+import platform
+import socket
+import getpass
+from datetime import datetime
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from typing import Any, Dict, List
+import textwrap
 
 class ReportGenerator:
     def __init__(self, config):
@@ -16,7 +21,7 @@ class ReportGenerator:
         self.output_dir = config.get("output", {}).get("output_dir", "./reports")
         self.template_path = config.get("output", {}).get("report_template", "templates/report.html")
 
-    def generate(self, results: Dict[str, Any], format_type: str = "json") -> str:
+    def generate(self, results: Dict[str, Any], format_type: str = "json", execution_stats: Dict[str, Any] = None) -> str:
         os.makedirs(self.output_dir, exist_ok=True)
         report_path = os.path.join(self.output_dir, f"credfinder_report.{format_type}")
         if format_type == "json":
@@ -25,7 +30,7 @@ class ReportGenerator:
         elif format_type == "csv":
             self._generate_csv(results, report_path)
         elif format_type == "html":
-            self._generate_html(results, report_path)
+            self._generate_html(results, report_path, execution_stats)
         elif format_type == "console":
             self._generate_console(results)
             report_path = "console"
@@ -43,65 +48,175 @@ class ReportGenerator:
                 else:
                     writer.writerow([module, json.dumps(findings)])
 
-    def _generate_html(self, results: Dict[str, Any], report_path: str):
-        # Use Jinja2 template for HTML report
-        template_dir = os.path.dirname(self.template_path) or '.'
-        template_file = os.path.basename(self.template_path)
-        env = Environment(
-            loader=FileSystemLoader(template_dir),
-            autoescape=select_autoescape(['html', 'xml'])
-        )
-        if not os.path.exists(self.template_path):
-            # Fallback: simple HTML if template missing
-            html = f"<html><body><h1>credfinder Report</h1><pre>{json.dumps(results, indent=2)}</pre></body></html>"
+    def _generate_html(self, results: Dict[str, Any], report_path: str, execution_stats: Dict[str, Any] = None):
+        """Generate HTML report with improved template path resolution"""
+        try:
+            # Try multiple template paths
+            template_paths = [
+                self.template_path,
+                os.path.join(os.path.dirname(__file__), '..', 'templates', 'report.html'),
+                os.path.join(os.getcwd(), 'templates', 'report.html'),
+                'templates/report.html'
+            ]
+            
+            template_found = None
+            for path in template_paths:
+                if os.path.exists(path):
+                    template_found = path
+                    break
+            
+            if not template_found:
+                print(f"Warning: Template not found in any of these locations: {template_paths}")
+                # Fallback: simple HTML if template missing
+                html = self._generate_fallback_html(results)
+                with open(report_path, 'w') as f:
+                    f.write(html)
+                return
+            
+            # Use the found template
+            template_dir = os.path.dirname(template_found)
+            template_file = os.path.basename(template_found)
+            
+            env = Environment(
+                loader=FileSystemLoader(template_dir),
+                autoescape=select_autoescape(['html', 'xml'])
+            )
+            
+            # Process and validate findings without categorization
+            processed_results = self._process_findings(results)
+            
+            # Calculate statistics for the template
+            total_findings = 0
+            critical_findings = 0
+            warning_findings = 0
+            modules_run = len(results)
+            
+            # Enhanced statistics calculation
+            for module_name, module_data in processed_results.items():
+                if isinstance(module_data, dict):
+                    # Handle nested structures like browser or ssh
+                    for key, value in module_data.items():
+                        if isinstance(value, list):
+                            total_findings += len(value)
+                            # Analyze each finding for severity
+                            for item in value:
+                                if isinstance(item, dict):
+                                    content = str(item).lower()
+                                    if any(keyword in content for keyword in ['password', 'secret', 'token', 'key', 'credential']):
+                                        critical_findings += 1
+                                    elif any(keyword in content for keyword in ['config', 'setting', 'preference']):
+                                        warning_findings += 1
+                        elif isinstance(value, dict) and 'items' in value:
+                            # Handle nested items like keyring
+                            if isinstance(value['items'], list):
+                                total_findings += len(value['items'])
+                                for item in value['items']:
+                                    if isinstance(item, dict):
+                                        content = str(item).lower()
+                                        if any(keyword in content for keyword in ['password', 'secret', 'token', 'key', 'credential']):
+                                            critical_findings += 1
+                elif isinstance(module_data, list):
+                    total_findings += len(module_data)
+                    for finding in module_data:
+                        if isinstance(finding, dict):
+                            content = str(finding).lower()
+                            if any(keyword in content for keyword in ['password', 'secret', 'token', 'key', 'credential']):
+                                critical_findings += 1
+                            elif any(keyword in content for keyword in ['config', 'setting', 'preference']):
+                                warning_findings += 1
+                elif module_data:
+                    total_findings += 1
+            
+            # Collect system information
+            system_info = self._collect_system_info()
+            
+            # Enhanced template context with more metadata
+            template_context = {
+                'results': processed_results,
+                'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'total_findings': total_findings,
+                'critical_findings': critical_findings,
+                'warning_findings': warning_findings,
+                'modules_run': modules_run,
+                'execution_stats': execution_stats or {},
+                'system_info': system_info,
+                'scan_metadata': {
+                    'version': '1.0',
+                    'report_type': 'HTML',
+                    'generation_time': datetime.now().isoformat()
+                }
+            }
+            
+            template = env.get_template(template_file)
+            html = template.render(**template_context)
             with open(report_path, 'w') as f:
                 f.write(html)
-            return
-        
-        # Process and categorize findings
-        processed_results = self._process_findings(results)
-        
-        # Calculate statistics for the template
-        total_findings = 0
-        critical_findings = 0
-        warning_findings = 0
-        modules_run = len(results)
-        
-        for module, findings in processed_results.items():
-            if isinstance(findings, list):
-                total_findings += len(findings)
-                for finding in findings:
-                    if isinstance(finding, dict):
-                        severity = finding.get('severity', 'warning')
-                        if severity == 'critical':
-                            critical_findings += 1
-                        elif severity == 'warning':
-                            warning_findings += 1
-                    else:
-                        warning_findings += 1
-            elif findings:
-                total_findings += 1
-                warning_findings += 1
-        
-        # Prepare template context
-        from datetime import datetime
-        template_context = {
-            'results': processed_results,
-            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'total_findings': total_findings,
-            'critical_findings': critical_findings,
-            'warning_findings': warning_findings,
-            'modules_run': modules_run
-        }
-        
-        template = env.get_template(template_file)
-        html = template.render(**template_context)
-        with open(report_path, 'w') as f:
-            f.write(html)
+                
+        except Exception as e:
+            import traceback
+            print(f"Error generating HTML report: {e}")
+            print(f"Error type: {type(e)}")
+            print(f"Traceback: {traceback.format_exc()}")
+            # Fallback to simple HTML
+            html = self._generate_fallback_html(results)
+            with open(report_path, 'w') as f:
+                f.write(html)
+    
+    def _generate_fallback_html(self, results: Dict[str, Any]) -> str:
+        """Generate a simple fallback HTML report"""
+        html = textwrap.dedent(f"""
+        <html>
+        <head>
+            <title>credfinder Report</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; margin: 20px; }}
+                .finding {{ margin: 10px 0; padding: 10px; border: 1px solid #ccc; }}
+                .critical {{ background-color: #ffebee; border-color: #f44336; }}
+                .warning {{ background-color: #fff3e0; border-color: #ff9800; }}
+                .info {{ background-color: #e3f2fd; border-color: #2196f3; }}
+            </style>
+        </head>
+        <body>
+            <h1>credfinder Report</h1>
+            <p>Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+            <pre>{json.dumps(results, indent=2, default=str)}</pre>
+        </body>
+        </html>
+        """)
+        return html
     
     def _process_findings(self, results: Dict[str, Any]) -> Dict[str, Any]:
-        # Pass raw findings directly for all modules
-        return results
+        """Process and validate findings data structure"""
+        processed_results = {}
+        
+        for module_name, module_data in results.items():
+            try:
+                if module_name == 'browser':
+                    # Browser data is already in the correct nested structure
+                    processed_results[module_name] = module_data
+                elif module_name == 'ssh':
+                    # SSH data should be a dict with specific keys
+                    if isinstance(module_data, dict):
+                        processed_results[module_name] = module_data
+                    else:
+                        print(f"Warning: SSH module returned unexpected data type: {type(module_data)}")
+                        processed_results[module_name] = {'error': 'Invalid data structure'}
+                elif module_name in ['keyring', 'memory', 'dotfiles', 'history']:
+                    # These modules should return lists or dicts
+                    if isinstance(module_data, (list, dict)):
+                        processed_results[module_name] = module_data
+                    else:
+                        print(f"Warning: {module_name} module returned unexpected data type: {type(module_data)}")
+                        processed_results[module_name] = []
+                else:
+                    # Unknown module, pass through as-is
+                    processed_results[module_name] = module_data
+                    
+            except Exception as e:
+                print(f"Error processing {module_name} module data: {e}")
+                processed_results[module_name] = {'error': str(e)}
+        
+        return processed_results
     
     def _categorize_finding(self, finding: Any, module_name: str) -> Dict[str, Any]:
         """Categorize a finding with severity and type information"""
@@ -436,6 +551,22 @@ class ReportGenerator:
                     })
         
         return categorized_findings
+    
+    def _collect_system_info(self) -> Dict[str, str]:
+        """Collect system information for the report"""
+        try:
+            return {
+                'hostname': socket.gethostname(),
+                'username': getpass.getuser(),
+                'os': f"{platform.system()} {platform.release()}",
+                'architecture': platform.machine(),
+                'python_version': platform.python_version(),
+                'platform': platform.platform()
+            }
+        except Exception as e:
+            return {
+                'error': f"Failed to collect system info: {e}"
+            }
     
     def _categorize_memory_finding(self, memory_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Special categorization for memory module findings"""

@@ -58,26 +58,182 @@
       "secret\\s*[:=]\\s*[^\\s]+"
     ]
   },
+  "execution": {
+    "default_strategy": "priority",
+    "available_strategies": ["priority", "custom", "time-optimized", "dependency-aware"],
+    "default_mode": "parallel",
+    "max_workers": 3,
+    "module_timeout": 300,
+    "global_timeout": 1800,
+    "default_order": ["ssh", "dotfiles", "history", "browser", "memory", "keyring"],
+    "fast_modules": ["ssh", "dotfiles", "history"],
+    "slow_modules": ["memory", "keyring"],
+    "privileged_modules": ["memory"],
+    "resource_intensive_modules": ["browser", "memory"],
+    "continue_on_error": true,
+    "retry_failed_modules": false,
+    "max_retries": 1
+  },
+  "security": {
+    "max_file_size": 104857600,
+    "min_free_space": 104857600,
+    "safe_file_permissions": "0o640",
+    "safe_dir_permissions": "0o750",
+    "allowed_output_dirs": [
+      "./reports",
+      "/tmp/credfinder",
+      "~/credfinder-results"
+    ],
+    "forbidden_paths": [
+      "/dev",
+      "/proc/*/mem",
+      "/sys/kernel",
+      "/sys/devices"
+    ],
+    "validate_symlinks": true,
+    "validate_devices": true,
+    "atomic_writes": true,
+    "secure_temp_files": true,
+    "check_disk_space": true,
+    "enforce_permissions": true
+  },
   "opsec": {
     "minimal_logging": true,
     "no_network_calls": true,
     "clean_exit": true,
-    "file_permissions": "600"
+    "file_permissions": "600",
+    "log_to_file": false,
+    "log_file": "/tmp/credfinder.log",
+    "hide_process_name": false,
+    "delete_temp_files": true,
+    "secure_memory": false
   },
   "output": {
     "formats": ["json", "html", "csv", "console"],
     "default_format": "json",
     "report_template": "templates/report.html",
-    "output_dir": "./reports"
+    "output_dir": "./reports",
+    "compress_results": false,
+    "encrypt_results": false,
+    "include_metadata": true,
+    "include_execution_stats": true,
+    "timestamp_format": "%Y%m%d_%H%M%S"
+  },
+  "error_handling": {
+    "continue_on_module_failure": true,
+    "log_full_tracebacks": true,
+    "retry_on_timeout": false,
+    "graceful_shutdown": true,
+    "cleanup_on_error": true,
+    "report_partial_results": true
   },
   "modules": {
-    "ssh": true,
-    "browser": true,
-    "keyring": true,
-    "memory": true,
-    "dotfiles": true,
-    "history": true,
-    "keylogger": false,
-    "clipboard": false
+    "ssh": {
+      "enabled": true,
+      "priority": 1,
+      "timeout": 60,
+      "parallel_safe": true,
+      "requires_privileges": false,
+      "estimated_time": "fast",
+      "resource_intensive": false,
+      "dependencies": [],
+      "retry_on_failure": false
+    },
+    "browser": {
+      "enabled": true,
+      "priority": 4,
+      "timeout": 180,
+      "parallel_safe": false,
+      "requires_privileges": false,
+      "estimated_time": "medium",
+      "resource_intensive": true,
+      "dependencies": [],
+      "retry_on_failure": true
+    },
+    "keyring": {
+      "enabled": true,
+      "priority": 6,
+      "timeout": 300,
+      "parallel_safe": false,
+      "requires_privileges": false,
+      "estimated_time": "slow",
+      "resource_intensive": false,
+      "dependencies": [],
+      "retry_on_failure": true
+    },
+    "memory": {
+      "enabled": true,
+      "priority": 5,
+      "timeout": 600,
+      "parallel_safe": true,
+      "requires_privileges": true,
+      "estimated_time": "slow",
+      "resource_intensive": true,
+      "dependencies": [],
+      "retry_on_failure": false
+    },
+    "dotfiles": {
+      "enabled": true,
+      "priority": 2,
+      "timeout": 120,
+      "parallel_safe": true,
+      "requires_privileges": false,
+      "estimated_time": "fast",
+      "resource_intensive": false,
+      "dependencies": [],
+      "retry_on_failure": false
+    },
+    "history": {
+      "enabled": true,
+      "priority": 3,
+      "timeout": 60,
+      "parallel_safe": true,
+      "requires_privileges": false,
+      "estimated_time": "fast",
+      "resource_intensive": false,
+      "dependencies": [],
+      "retry_on_failure": false
+    },
+    "keylogger": {
+      "enabled": false,
+      "priority": 7,
+      "timeout": 300,
+      "parallel_safe": false,
+      "requires_privileges": false,
+      "estimated_time": "medium",
+      "resource_intensive": false,
+      "dependencies": [],
+      "retry_on_failure": false
+    },
+    "clipboard": {
+      "enabled": false,
+      "priority": 8,
+      "timeout": 60,
+      "parallel_safe": false,
+      "requires_privileges": false,
+      "estimated_time": "fast",
+      "resource_intensive": false,
+      "dependencies": [],
+      "retry_on_failure": false
+    }
+  },
+  "performance": {
+    "max_concurrent_modules": 3,
+    "memory_limit_mb": 1024,
+    "cpu_limit_percent": 80,
+    "io_limit_mbps": 100,
+    "enable_profiling": false,
+    "profile_output": "./reports/profile.json"
+  },
+  "logging": {
+    "level": "INFO",
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    "file_logging": false,
+    "console_logging": true,
+    "log_rotation": true,
+    "max_log_size_mb": 10,
+    "backup_count": 3,
+    "use_colors": true,
+    "structured_logging": true
   }
 } 

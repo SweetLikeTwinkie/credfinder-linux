@@ -7,8 +7,15 @@ Searches processes and memory for secrets
 import os
 import re
 import subprocess
-import psutil
 from typing import List, Dict, Any
+
+# Try to import psutil, but handle gracefully if not available
+try:
+    import psutil
+    PSUTIL_AVAILABLE = True
+except ImportError:
+    PSUTIL_AVAILABLE = False
+    print("Warning: psutil not available. Memory scanning will be limited.")
 
 
 class MemoryGrepper:
@@ -23,16 +30,23 @@ class MemoryGrepper:
             "process_cmdline": [],
             "memory_dumps": [],
             "proc_files": [],
-            "volatility_results": {}
+            "volatility_results": {},
+            "dependencies": {
+                "psutil_available": PSUTIL_AVAILABLE
+            }
         }
         
-        # Scan process environments
-        results["process_environ"] = self._scan_process_environ()
+        # Only scan processes if psutil is available
+        if PSUTIL_AVAILABLE:
+            # Scan process environments
+            results["process_environ"] = self._scan_process_environ()
+            
+            # Scan process command lines
+            results["process_cmdline"] = self._scan_process_cmdline()
+        else:
+            print("Warning: psutil not available, skipping process scanning")
         
-        # Scan process command lines
-        results["process_cmdline"] = self._scan_process_cmdline()
-        
-        # Scan /proc files
+        # Scan /proc files (this doesn't require psutil)
         results["proc_files"] = self._scan_proc_files()
         
         # Try Volatility if available
@@ -44,6 +58,9 @@ class MemoryGrepper:
     def _scan_process_environ(self) -> List[Dict[str, Any]]:
         """Scan process environment variables for secrets"""
         findings = []
+        
+        if not PSUTIL_AVAILABLE:
+            return findings
         
         for proc in psutil.process_iter(['pid', 'name', 'environ']):
             try:
@@ -61,12 +78,18 @@ class MemoryGrepper:
             
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 continue
+            except Exception as e:
+                print(f"Warning: Error scanning process {proc.pid if hasattr(proc, 'pid') else 'unknown'}: {e}")
+                continue
         
         return findings
     
     def _scan_process_cmdline(self) -> List[Dict[str, Any]]:
         """Scan process command lines for secrets"""
         findings = []
+        
+        if not PSUTIL_AVAILABLE:
+            return findings
         
         for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
             try:
@@ -84,6 +107,9 @@ class MemoryGrepper:
                         })
             
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                continue
+            except Exception as e:
+                print(f"Warning: Error scanning process {proc.pid if hasattr(proc, 'pid') else 'unknown'}: {e}")
                 continue
         
         return findings

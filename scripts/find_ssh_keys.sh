@@ -45,7 +45,22 @@ is_encrypted() {
 # Function to check file permissions
 check_permissions() {
     local file="$1"
-    local perms=$(stat -c "%a" "$file" 2>/dev/null)
+    local perms
+    
+    # Try different stat commands for portability
+    if command -v stat >/dev/null 2>&1; then
+        if stat --version 2>/dev/null | grep -q GNU; then
+            # GNU stat
+            perms=$(stat -c "%a" "$file" 2>/dev/null)
+        else
+            # BSD stat
+            perms=$(stat -f "%Lp" "$file" 2>/dev/null)
+        fi
+    else
+        # Fallback to ls
+        perms=$(ls -ld "$file" 2>/dev/null | awk '{print $1}' | sed 's/[^0-9]//g')
+    fi
+    
     if [[ "$perms" == "600" || "$perms" == "400" ]]; then
         echo -e "${GREEN}✓${NC}"
     else
@@ -81,7 +96,7 @@ for path in "${SSH_PATHS[@]}"; do
                         check_permissions "$key_file"
                         
                         # Get file owner
-                        owner=$(stat -c "%U" "$key_file" 2>/dev/null || echo "unknown")
+                        owner=$(stat -c "%U" "$key_file" 2>/dev/null || stat -f "%Su" "$key_file" 2>/dev/null || echo "unknown")
                         echo "    Owner: $owner"
                         
                         FOUND_KEYS+=("$key_file")

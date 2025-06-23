@@ -24,7 +24,8 @@ class SSHScanner:
             "public_keys": [],
             "ssh_agent": None,
             "known_hosts": [],
-            "config_files": []
+            "config_files": [],
+            "authorized_keys": []
         }
         
         # Scan for SSH keys
@@ -39,6 +40,9 @@ class SSHScanner:
         
         # Find SSH config files
         results["config_files"] = self._find_ssh_configs()
+        
+        # Find authorized_keys files
+        results["authorized_keys"] = self._find_authorized_keys()
         
         return results
     
@@ -107,6 +111,7 @@ class SSHScanner:
                 "owner": self._get_file_owner(file_path)
             }
         except Exception as e:
+            print(f"Warning: Failed to analyze private key {file_path}: {e}")
             return None
     
     def _analyze_public_key(self, file_path: str) -> Dict[str, Any]:
@@ -131,6 +136,7 @@ class SSHScanner:
                     "owner": self._get_file_owner(file_path)
                 }
         except Exception as e:
+            print(f"Warning: Failed to analyze public key {file_path}: {e}")
             return None
         
         return None
@@ -255,6 +261,73 @@ class SSHScanner:
                     pass
         
         return configs
+    
+    def _find_authorized_keys(self) -> List[Dict[str, Any]]:
+        """Find authorized_keys files"""
+        authorized_keys = []
+        
+        for path in self.scan_paths:
+            expanded_path = os.path.expanduser(path)
+            authorized_keys_path = os.path.join(expanded_path, "authorized_keys")
+            
+            if os.path.isfile(authorized_keys_path):
+                try:
+                    with open(authorized_keys_path, 'r') as f:
+                        content = f.read()
+                    
+                    # Parse authorized_keys content
+                    keys = []
+                    for line in content.splitlines():
+                        line = line.strip()
+                        if line and not line.startswith('#') and line.startswith('ssh-'):
+                            parts = line.split()
+                            if len(parts) >= 2:
+                                key_type = parts[0]
+                                key_data = parts[1]
+                                comment = ' '.join(parts[2:]) if len(parts) > 2 else ""
+                                
+                                # Try to get fingerprint
+                                fingerprint = self._get_key_fingerprint(key_type + " " + key_data)
+                                
+                                keys.append({
+                                    "key_type": key_type,
+                                    "key_data": key_data[:50] + "..." if len(key_data) > 50 else key_data,
+                                    "comment": comment,
+                                    "fingerprint": fingerprint
+                                })
+                    
+                    if keys:
+                        authorized_keys.append({
+                            "path": authorized_keys_path,
+                            "keys": keys,
+                            "count": len(keys),
+                            "owner": self._get_file_owner(authorized_keys_path),
+                            "permissions": oct(os.stat(authorized_keys_path).st_mode)[-3:]
+                        })
+                except Exception as e:
+                    pass
+        
+        return authorized_keys
+    
+    def _get_key_fingerprint(self, key_data: str) -> str:
+        """Get SSH key fingerprint"""
+        try:
+            # Use ssh-keygen to get fingerprint
+            result = subprocess.run(
+                ['ssh-keygen', '-l', '-f', '-'],
+                input=key_data.encode(),
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if result.returncode == 0 and result.stdout:
+                # Parse fingerprint from output
+                parts = result.stdout.strip().split()
+                if len(parts) >= 2:
+                    return parts[1]
+        except Exception:
+            pass
+        return None
     
     def _get_file_owner(self, file_path: str) -> str:
         """Get file owner"""

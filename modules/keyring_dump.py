@@ -200,20 +200,20 @@ class KeyringDump:
     def _parse_secret_tool_output(self, output: str) -> List[Dict[str, Any]]:
         """Parse secret-tool output"""
         items = []
-        current_item = {}
+        current_item = {"attributes": {}, "secret": None}
         
         for line in output.strip().split('\n'):
             line = line.strip()
             
             if not line:
-                if current_item:
+                if current_item and (current_item.get("attributes") or current_item.get("secret")):
                     items.append(current_item)
-                    current_item = {}
+                current_item = {"attributes": {}, "secret": None}
                 continue
             
             if line.startswith('[') and line.endswith(']'):
                 # New item
-                if current_item:
+                if current_item and (current_item.get("attributes") or current_item.get("secret")):
                     items.append(current_item)
                 current_item = {"attributes": {}, "secret": None}
                 continue
@@ -222,11 +222,14 @@ class KeyringDump:
                 key, value = line.split(' = ', 1)
                 if key == 'secret':
                     current_item["secret"] = value
+                elif key.startswith('attribute.'):
+                    attr_name = key.replace('attribute.', '')
+                    current_item["attributes"][attr_name] = value
                 else:
                     current_item["attributes"][key] = value
         
-        # Add the last item
-        if current_item:
+        # Add the last item if it has content
+        if current_item and (current_item.get("attributes") or current_item.get("secret")):
             items.append(current_item)
         
         return items

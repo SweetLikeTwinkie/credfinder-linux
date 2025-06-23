@@ -1,35 +1,44 @@
-# credfinder-linux — Linux Credential & Secret Hunting Scripts
+# credfinder-linux
 
-A comprehensive post-exploitation toolkit for harvesting secrets, credentials, SSH keys, tokens, and config leaks on Linux systems.
+**Linux Credential & Secret Hunting Toolkit**
+
+A comprehensive post-exploitation toolkit for harvesting secrets, credentials, SSH keys, tokens, and config leaks on Linux systems. Designed for security professionals, penetration testers, and system administrators.
+
+---
 
 ## Legal Disclaimer
 
-This toolkit is designed for **authorized security testing and penetration testing purposes only**. Only use on systems you own or have explicit permission to test. Unauthorized use may violate laws and regulations.
+> **This toolkit is intended for authorized security testing and penetration testing purposes only. Use it only on systems you own or have explicit permission to test. Unauthorized use may violate laws and regulations.**
 
-## Features / Script Modules
+---
 
-### 1. SSH Credential Discovery
-- **`find_ssh_keys.sh`**: Search for private/public keys in common locations
-- **`check_ssh_agents.py`**: Check SSH agent and dump loaded identities
+## Features
 
-### 2. Browser Password & History Extractor
-- **`chrome_dump.py`**: Extract credentials from Chromium-based browsers
-- **`firefox_logins.py`**: Extract Firefox saved passwords and cookies
+- **SSH Credential Discovery**
+  - Find private/public keys in common locations
+  - Check SSH agent and dump loaded identities
 
-### 3. Desktop Keyring Dump
-- **`keyring_dump.sh`**: Extract passwords from GNOME Keyring and KWallet
+- **Browser Password & History Extraction**
+  - Extract and decrypt credentials from Chromium-based browsers (Chrome, Chromium, Brave)
+  - Extract Firefox saved passwords and cookies (with optional decryption)
+  - Automatic password decryption for supported browsers on Linux
 
-### 4. Memory-Based Secret Hunting
-- **`memory_grepper.sh`**: Search processes and memory for secrets
-- **`volatility_parser.py`**: Parse memory dumps for credentials (requires Volatility)
+- **Desktop Keyring Dump**
+  - Extract passwords from GNOME Keyring and KWallet
 
-### 5. Dotfile Credentials & Config Parsers
-- **`dotfile_scanner.py`**: Scan configuration files for secrets
-- **`history_parser.py`**: Parse shell history for credentials
+- **Memory-Based Secret Hunting**
+  - Search processes and memory for secrets
+  - Parse memory dumps for credentials (Volatility support)
 
-### 6. Keylogging & Clipboard Sniffers (Optional)
-- **`keylogger.py`**: Capture keystrokes (desktop environments only)
-- **`clipboard_sniffer.py`**: Monitor clipboard for sensitive data
+- **Dotfile & Config Parsers**
+  - Scan configuration files and dotfiles for secrets
+  - Parse shell history for credentials
+
+- **Keylogging & Clipboard Sniffers (Optional)**
+  - Capture keystrokes (desktop environments only)
+  - Monitor clipboard for sensitive data
+
+---
 
 ## Installation
 
@@ -40,45 +49,54 @@ pip install -r requirements.txt
 chmod +x scripts/*.sh
 ```
 
+---
+
 ## Quick Start
 
 ### Basic Scan
+
 ```bash
 # Run all modules
 python3 main.py --all
 
-# Run specific module
-python3 main.py --ssh
-python3 main.py --browser
-python3 main.py --keyring
+# Run specific modules
+python3 main.py --modules ssh browser
 ```
 
-### Advanced Options
+### Advanced Usage
+
 ```bash
-# Generate HTML report
+# Generate an HTML report
 python3 main.py --all --report html
 
-# Scan specific directory
+# Scan a specific directory
 python3 main.py --all --target /home/user
 
-# OPSEC mode (minimal logging)
+# Enable OPSEC mode (minimal logging)
 python3 main.py --all --opsec
 ```
+
+---
 
 ## Requirements
 
 - Python 3.7+
 - SQLite3
-- Common Linux utilities (grep, find, ps, etc.)
-- Optional: Volatility Framework for memory analysis
+- Common Linux utilities (`grep`, `find`, `ps`, etc.)
+- Optional: Volatility Framework (for memory analysis)
+- Optional: `pycryptodome` (for browser password decryption)
+- Optional: `secretstorage` (for GNOME Keyring access)
+
+---
 
 ## Configuration
 
 Edit `config.json` to customize:
-- Scan paths
-- File patterns
-- Output formats
-- OPSEC settings
+- Scan paths and file patterns
+- Output formats and directories
+- OPSEC and security settings
+
+---
 
 ## Output Formats
 
@@ -87,16 +105,22 @@ Edit `config.json` to customize:
 - **CSV**: Spreadsheet-friendly format
 - **Console**: Real-time output
 
+---
+
 ## OPSEC Considerations
 
 - Minimal logging in OPSEC mode
 - No network calls unless explicitly configured
 - Clean exit without traces
-- Configurable file permissions
+- Configurable file and directory permissions
+
+---
 
 ## License
 
-MIT License - see LICENSE file for details.
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+
+---
 
 ## Contributing
 
@@ -104,3 +128,14 @@ MIT License - see LICENSE file for details.
 2. Create a feature branch
 3. Add tests for new functionality
 4. Submit a pull request
+
+---
+
+## Acknowledgments
+
+- Inspired by common post-exploitation and credential hunting techniques
+- Contributions and feedback are welcome!
+
+---
+
+**For questions, issues, or contributions, please open an issue or pull request on the repository.**

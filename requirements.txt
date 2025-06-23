@@ -14,13 +14,13 @@ secretstorage>=3.3.0
 pynput>=1.7.6
 pyperclip>=1.8.2
 
-# Optional: Memory analysis
-volatility3>=2.4.0
-
 # Reporting and output
 jinja2>=3.0.0
 markdown>=3.3.0
 
 # Utilities
 colorama>=0.4.4
-tqdm>=4.62.0 
+tqdm>=4.62.0
+
+# Error handling and validation
+jsonschema>=3.2.0 

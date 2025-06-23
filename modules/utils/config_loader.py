@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 
 class ConfigLoader:
     def __init__(self, config_path="config.json"):
@@ -8,9 +9,32 @@ class ConfigLoader:
 
     def _load_config(self):
         if os.path.exists(self.config_path):
-            with open(self.config_path, 'r') as f:
-                return json.load(f)
-        return {}
+            try:
+                # Check file size first
+                file_size = os.path.getsize(self.config_path)
+                if file_size > 10 * 1024 * 1024:  # 10MB limit
+                    print(f"Error: Config file {self.config_path} is too large ({file_size} bytes)")
+                    return {}
+                
+                with open(self.config_path, 'r') as f:
+                    config_data = json.load(f)
+                return config_data
+                
+            except json.JSONDecodeError as e:
+                print(f"Error: Invalid JSON in config file {self.config_path}: {e}")
+                return {}
+            except RecursionError as e:
+                print(f"Error: Config file {self.config_path} has excessive nesting depth")
+                return {}
+            except MemoryError as e:
+                print(f"Error: Config file {self.config_path} is too large to process")
+                return {}
+            except Exception as e:
+                print(f"Error: Could not read config file {self.config_path}: {e}")
+                return {}
+        else:
+            print(f"Warning: Config file {self.config_path} not found, using defaults")
+            return {}
 
     def get(self, key, default=None):
         return self._config.get(key, default)
@@ -31,5 +55,8 @@ class ConfigLoader:
         self._config["opsec"]["clean_exit"] = enabled
 
     def save(self):
-        with open(self.config_path, 'w') as f:
-            json.dump(self._config, f, indent=2) 
+        try:
+            with open(self.config_path, 'w') as f:
+                json.dump(self._config, f, indent=2)
+        except Exception as e:
+            print(f"Error: Could not save config file {self.config_path}: {e}") 

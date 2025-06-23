@@ -10,15 +10,35 @@ import json
 import base64
 import shutil
 import tempfile
+import time
+import fcntl
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import subprocess
+import sys
+
+# Import crypto libraries if available
+try:
+    from Crypto.Cipher import AES
+    from Crypto.Protocol.KDF import PBKDF2
+    CRYPTO_AVAILABLE = True
+except ImportError:
+    CRYPTO_AVAILABLE = False
+    print("Warning: pycryptodome not installed. Browser password decryption will be limited.")
+
+# Import secretstorage for GNOME keyring access
+try:
+    import secretstorage
+    SECRETSTORAGE_AVAILABLE = True
+except ImportError:
+    SECRETSTORAGE_AVAILABLE = False
 
 
 class BrowserExtractor:
     def __init__(self, config):
         self.config = config
         self.browser_paths = config.get("scan_paths", {}).get("browsers", {})
+        self._chrome_key_cache = None
         
     def extract_all(self) -> Dict[str, Any]:
         """Extract credentials from all supported browsers"""
@@ -90,13 +110,14 @@ class BrowserExtractor:
         if not os.path.exists(login_data_path):
             return passwords
         
-        # Create a temporary copy of the database
-        temp_db = None
+        # Create a temporary copy of the database using safe copy
+        temp_db_path = None
         try:
-            temp_db = tempfile.NamedTemporaryFile(delete=False, suffix='.db')
-            shutil.copy2(login_data_path, temp_db.name)
+            temp_db_path = self._safe_copy_database(login_data_path)
+            if not temp_db_path:
+                return passwords
             
-            conn = sqlite3.connect(temp_db.name)
+            conn = sqlite3.connect(temp_db_path)
             cursor = conn.cursor()
             
             # Query for saved passwords
@@ -109,26 +130,32 @@ class BrowserExtractor:
             for row in cursor.fetchall():
                 origin_url, username, encrypted_password, date_created, date_last_used = row
                 
-                # Try to decrypt password (this is simplified - real decryption requires OS keychain)
+                # Try to decrypt password
                 decrypted_password = self._attempt_chrome_decrypt(encrypted_password)
                 
-                passwords.append({
-                    "url": origin_url,
-                    "username": username,
-                    "password": decrypted_password,
-                    "encrypted": decrypted_password is None,
-                    "date_created": date_created,
-                    "date_last_used": date_last_used,
-                    "profile_path": profile_path
-                })
+                # Only add if we have valid data
+                if username or decrypted_password:
+                    passwords.append({
+                        "url": origin_url,
+                        "username": username,
+                        "password": decrypted_password if decrypted_password else "***ENCRYPTED***",
+                        "encrypted": decrypted_password is None,
+                        "decrypted": decrypted_password is not None,
+                        "date_created": date_created,
+                        "date_last_used": date_last_used,
+                        "profile_path": profile_path
+                    })
             
             conn.close()
             
         except Exception as e:
-            pass
+            print(f"Warning: Failed to extract passwords from {profile_path}: {e}")
         finally:
-            if temp_db:
-                os.unlink(temp_db.name)
+            if temp_db_path and os.path.exists(temp_db_path):
+                try:
+                    os.unlink(temp_db_path)
+                except Exception as e:
+                    print(f"Warning: Could not clean up temp file {temp_db_path}: {e}")
         
         return passwords
     
@@ -140,12 +167,13 @@ class BrowserExtractor:
         if not os.path.exists(cookies_path):
             return cookies
         
-        temp_db = None
+        temp_db_path = None
         try:
-            temp_db = tempfile.NamedTemporaryFile(delete=False, suffix='.db')
-            shutil.copy2(cookies_path, temp_db.name)
+            temp_db_path = self._safe_copy_database(cookies_path)
+            if not temp_db_path:
+                return cookies
             
-            conn = sqlite3.connect(temp_db.name)
+            conn = sqlite3.connect(temp_db_path)
             cursor = conn.cursor()
             
             # Query for cookies
@@ -161,25 +189,31 @@ class BrowserExtractor:
                 # Try to decrypt cookie value
                 decrypted_value = self._attempt_chrome_decrypt(value)
                 
-                cookies.append({
-                    "host": host,
-                    "name": name,
-                    "value": decrypted_value,
-                    "encrypted": decrypted_value is None,
-                    "path": path,
-                    "expires": expires,
-                    "secure": bool(is_secure),
-                    "httponly": bool(is_httponly),
-                    "profile_path": profile_path
-                })
+                # Only add meaningful cookies
+                if name and host:
+                    cookies.append({
+                        "host": host,
+                        "name": name,
+                        "value": decrypted_value if decrypted_value else "***ENCRYPTED***",
+                        "encrypted": decrypted_value is None,
+                        "decrypted": decrypted_value is not None,
+                        "path": path,
+                        "expires": expires,
+                        "secure": bool(is_secure),
+                        "httponly": bool(is_httponly),
+                        "profile_path": profile_path
+                    })
             
             conn.close()
             
         except Exception as e:
-            pass
+            print(f"Warning: Failed to extract cookies from {profile_path}: {e}")
         finally:
-            if temp_db:
-                os.unlink(temp_db.name)
+            if temp_db_path and os.path.exists(temp_db_path):
+                try:
+                    os.unlink(temp_db_path)
+                except Exception as e:
+                    print(f"Warning: Could not clean up temp file {temp_db_path}: {e}")
         
         return cookies
     
@@ -191,12 +225,13 @@ class BrowserExtractor:
         if not os.path.exists(web_data_path):
             return autofill
         
-        temp_db = None
+        temp_db_path = None
         try:
-            temp_db = tempfile.NamedTemporaryFile(delete=False, suffix='.db')
-            shutil.copy2(web_data_path, temp_db.name)
+            temp_db_path = self._safe_copy_database(web_data_path)
+            if not temp_db_path:
+                return autofill
             
-            conn = sqlite3.connect(temp_db.name)
+            conn = sqlite3.connect(temp_db_path)
             cursor = conn.cursor()
             
             # Query for autofill data
@@ -221,30 +256,143 @@ class BrowserExtractor:
             conn.close()
             
         except Exception as e:
-            pass
+            print(f"Warning: Failed to extract autofill data from {profile_path}: {e}")
         finally:
-            if temp_db:
-                os.unlink(temp_db.name)
+            if temp_db_path and os.path.exists(temp_db_path):
+                try:
+                    os.unlink(temp_db_path)
+                except Exception as e:
+                    print(f"Warning: Could not clean up temp file {temp_db_path}: {e}")
         
         return autofill
     
-    def _attempt_chrome_decrypt(self, encrypted_data: bytes) -> str:
-        """Attempt to decrypt Chrome encrypted data"""
-        # This is a simplified version - real decryption requires:
-        # 1. Access to the OS keychain (gnome-keyring, kwallet, etc.)
-        # 2. Chrome's encryption key derivation
-        # 3. AES decryption
-        
-        try:
-            # For now, return None to indicate encrypted data
-            # In a real implementation, you would:
-            # 1. Extract the encryption key from the OS keychain
-            # 2. Derive the decryption key using PBKDF2
-            # 3. Decrypt using AES-128-CBC
+    def _get_chrome_encryption_key(self) -> Optional[bytes]:
+        """Get Chrome encryption key from system keyring or use default"""
+        if self._chrome_key_cache is not None:
+            return self._chrome_key_cache
             
+        # Try different methods to get the key
+        key = None
+        
+        # Method 1: Try GNOME Keyring via secretstorage
+        if SECRETSTORAGE_AVAILABLE:
+            try:
+                bus = secretstorage.dbus_init()
+                collection = secretstorage.get_default_collection(bus)
+                for item in collection.get_all_items():
+                    if item.get_label() == 'Chrome Safe Storage' or \
+                       item.get_label() == 'Chromium Safe Storage':
+                        key = item.get_secret()
+                        break
+            except Exception as e:
+                pass
+        
+        # Method 2: Try using secret-tool command
+        if not key:
+            try:
+                for app in ['chrome', 'chromium']:
+                    result = subprocess.run(
+                        ['secret-tool', 'lookup', 'application', app],
+                        capture_output=True,
+                        text=True,
+                        timeout=5
+                    )
+                    if result.returncode == 0 and result.stdout:
+                        key = result.stdout.encode()
+                        break
+            except Exception:
+                pass
+        
+        # Method 3: Try KWallet
+        if not key:
+            try:
+                result = subprocess.run(
+                    ['kwallet-query', 'kdewallet', '--read-password', 'Chrome Safe Storage'],
+                    capture_output=True,
+                    text=True,
+                    timeout=5
+                )
+                if result.returncode == 0 and result.stdout:
+                    key = result.stdout.strip().encode()
+            except Exception:
+                pass
+        
+        # Method 4: Use default password "peanuts" for basic store
+        if not key:
+            key = b'peanuts'
+        
+        # Derive the actual encryption key using PBKDF2
+        if CRYPTO_AVAILABLE and key:
+            # Chrome uses PBKDF2 with SHA1, 1 iteration, and salt 'saltysalt'
+            derived_key = PBKDF2(key, b'saltysalt', dkLen=16, count=1)
+            self._chrome_key_cache = derived_key
+            return derived_key
+        
+        return None
+    
+    def _decrypt_chrome_password_v10(self, encrypted_data: bytes) -> Optional[str]:
+        """Decrypt Chrome v10 encrypted password (Linux)"""
+        if not CRYPTO_AVAILABLE:
             return None
-        except Exception:
+            
+        try:
+            # Check if data is encrypted (starts with v10)
+            if not encrypted_data or len(encrypted_data) < 3:
+                return None
+                
+            if encrypted_data[:3] != b'v10':
+                # Try to decode as plain text
+                try:
+                    return encrypted_data.decode('utf-8')
+                except:
+                    return None
+            
+            # Get encryption key
+            key = self._get_chrome_encryption_key()
+            if not key:
+                return None
+            
+            # Remove 'v10' prefix
+            encrypted_data = encrypted_data[3:]
+            
+            # Initialize AES cipher (Chrome uses AES-128-CBC)
+            # IV is the first 16 bytes
+            if len(encrypted_data) < 16:
+                return None
+                
+            iv = encrypted_data[:16]
+            ciphertext = encrypted_data[16:]
+            
+            # Decrypt
+            cipher = AES.new(key, AES.MODE_CBC, iv)
+            decrypted = cipher.decrypt(ciphertext)
+            
+            # Remove PKCS7 padding
+            padding_length = decrypted[-1]
+            if padding_length > 0 and padding_length <= 16:
+                decrypted = decrypted[:-padding_length]
+            
+            # Decode to string
+            try:
+                return decrypted.decode('utf-8')
+            except UnicodeDecodeError:
+                # Try latin-1 as fallback
+                return decrypted.decode('latin-1', errors='ignore')
+                
+        except Exception as e:
             return None
+    
+    def _attempt_chrome_decrypt(self, encrypted_data: bytes) -> Optional[str]:
+        """Attempt to decrypt Chrome encrypted data"""
+        if not encrypted_data:
+            return None
+            
+        # For Linux, use v10 decryption
+        if sys.platform.startswith('linux'):
+            return self._decrypt_chrome_password_v10(encrypted_data)
+        
+        # For other platforms, return None (not implemented)
+        return None
     
     def _extract_firefox_credentials(self) -> Dict[str, Any]:
         """Extract credentials from Firefox"""
@@ -283,6 +431,12 @@ class BrowserExtractor:
         if not os.path.exists(key4_db_path) or not os.path.exists(logins_json_path):
             return passwords
         
+        # Method 1: Try using firefox_decrypt if available
+        decrypted_passwords = self._try_firefox_decrypt_tool(profile_path)
+        if decrypted_passwords:
+            return decrypted_passwords
+        
+        # Method 2: Extract encrypted entries (fallback)
         try:
             # Read logins.json
             with open(logins_json_path, 'r') as f:
@@ -290,21 +444,79 @@ class BrowserExtractor:
             
             # Extract login entries
             for entry in logins_data.get("logins", []):
-                login_info = entry.get("hostname", "")
-                username = entry.get("encryptedUsername", "")
-                password = entry.get("encryptedPassword", "")
+                hostname = entry.get("hostname", "")
+                form_submit_url = entry.get("formSubmitURL", "")
+                username_field = entry.get("usernameField", "")
+                password_field = entry.get("passwordField", "")
+                encrypted_username = entry.get("encryptedUsername", "")
+                encrypted_password = entry.get("encryptedPassword", "")
+                time_created = entry.get("timeCreated", 0)
+                time_last_used = entry.get("timeLastUsed", 0)
+                time_password_changed = entry.get("timePasswordChanged", 0)
                 
-                # Note: Decryption requires the key4.db database and master password
-                # This is a simplified version showing the structure
-                
+                # For now, we can't decrypt without NSS libraries
+                # But we can show the structure and encrypted data
                 passwords.append({
-                    "url": login_info,
-                    "username": username,
-                    "password": password,
+                    "url": hostname,
+                    "form_submit_url": form_submit_url,
+                    "username": "***ENCRYPTED***",
+                    "password": "***ENCRYPTED***",
                     "encrypted": True,
-                    "profile_path": profile_path
+                    "decrypted": False,
+                    "username_field": username_field,
+                    "password_field": password_field,
+                    "time_created": time_created,
+                    "time_last_used": time_last_used,
+                    "time_password_changed": time_password_changed,
+                    "profile_path": profile_path,
+                    "note": "Firefox passwords require NSS libraries or firefox_decrypt tool to decrypt"
                 })
         
+        except Exception as e:
+            print(f"Warning: Failed to extract Firefox passwords from {profile_path}: {e}")
+        
+        return passwords
+    
+    def _try_firefox_decrypt_tool(self, profile_path: str) -> List[Dict[str, Any]]:
+        """Try to use firefox_decrypt tool if available"""
+        passwords = []
+        
+        try:
+            # Check if firefox_decrypt is available
+            result = subprocess.run(
+                ['which', 'firefox_decrypt'],
+                capture_output=True,
+                timeout=5
+            )
+            
+            if result.returncode != 0:
+                # Tool not available
+                return passwords
+            
+            # Run firefox_decrypt on the profile
+            result = subprocess.run(
+                ['firefox_decrypt', profile_path, '--no-interactive', '--format', 'json'],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            if result.returncode == 0 and result.stdout:
+                # Parse the JSON output
+                try:
+                    decrypted_data = json.loads(result.stdout)
+                    for entry in decrypted_data:
+                        passwords.append({
+                            "url": entry.get("hostname", ""),
+                            "username": entry.get("username", ""),
+                            "password": entry.get("password", "***HIDDEN***"),
+                            "encrypted": False,
+                            "decrypted": True,
+                            "profile_path": profile_path
+                        })
+                except json.JSONDecodeError:
+                    pass
+                    
         except Exception as e:
             pass
         
@@ -318,12 +530,13 @@ class BrowserExtractor:
         if not os.path.exists(cookies_sqlite_path):
             return cookies
         
-        temp_db = None
+        temp_db_path = None
         try:
-            temp_db = tempfile.NamedTemporaryFile(delete=False, suffix='.db')
-            shutil.copy2(cookies_sqlite_path, temp_db.name)
+            temp_db_path = self._safe_copy_database(cookies_sqlite_path)
+            if not temp_db_path:
+                return cookies
             
-            conn = sqlite3.connect(temp_db.name)
+            conn = sqlite3.connect(temp_db_path)
             cursor = conn.cursor()
             
             # Query for cookies
@@ -350,9 +563,68 @@ class BrowserExtractor:
             conn.close()
             
         except Exception as e:
-            pass
+            print(f"Warning: Failed to extract Firefox cookies from {profile_path}: {e}")
         finally:
-            if temp_db:
-                os.unlink(temp_db.name)
+            if temp_db_path and os.path.exists(temp_db_path):
+                try:
+                    os.unlink(temp_db_path)
+                except Exception as e:
+                    print(f"Warning: Could not clean up temp file {temp_db_path}: {e}")
         
-        return cookies 
+        return cookies
+    
+    def _safe_copy_database(self, source_path: str, max_retries: int = 3) -> str:
+        """Safely copy a database file with retry logic and file locking"""
+        if not os.path.exists(source_path):
+            print(f"Warning: Source database {source_path} does not exist")
+            return None
+            
+        temp_db = None
+        
+        for attempt in range(max_retries):
+            try:
+                # Create temporary file
+                temp_db = tempfile.NamedTemporaryFile(delete=False, suffix='.db')
+                temp_path = temp_db.name
+                temp_db.close()
+                
+                # Try to copy with file locking
+                with open(source_path, 'rb') as src:
+                    try:
+                        # Try to get a shared lock (read-only)
+                        fcntl.flock(src.fileno(), fcntl.LOCK_SH | fcntl.LOCK_NB)
+                        
+                        # Copy the file
+                        with open(temp_path, 'wb') as dst:
+                            shutil.copyfileobj(src, dst)
+                        
+                        # Release the lock
+                        fcntl.flock(src.fileno(), fcntl.LOCK_UN)
+                        return temp_path
+                        
+                    except (IOError, OSError) as e:
+                        # File is locked, try again
+                        if attempt < max_retries - 1:
+                            print(f"Warning: Database {source_path} is locked, retrying in 1 second...")
+                            time.sleep(1)
+                            continue
+                        else:
+                            print(f"Error: Failed to copy {source_path} after {max_retries} attempts: {e}")
+                            return None
+                            
+            except Exception as e:
+                if temp_db and os.path.exists(temp_db.name):
+                    try:
+                        os.unlink(temp_db.name)
+                    except:
+                        pass
+                
+                if attempt < max_retries - 1:
+                    print(f"Warning: Failed to copy {source_path} (attempt {attempt + 1}): {e}")
+                    time.sleep(1)
+                    continue
+                else:
+                    print(f"Error: Failed to copy {source_path} after {max_retries} attempts: {e}")
+                    return None
+        
+        return None 
