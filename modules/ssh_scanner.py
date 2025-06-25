@@ -10,12 +10,14 @@ import glob
 import re
 from pathlib import Path
 from typing import List, Dict, Any
+from modules.utils.logger import get_logger
 
 
 class SSHScanner:
     def __init__(self, config):
         self.config = config
         self.scan_paths = config.get("scan_paths", {}).get("ssh", [])
+        self.logger = get_logger("credfinder.sshscanner")
         
     def scan(self) -> Dict[str, Any]:
         """Main scan method"""
@@ -55,17 +57,16 @@ class SSHScanner:
         ]
         
         for path in self.scan_paths:
-            expanded_path = os.path.expanduser(path)
-            
-            for pattern in key_patterns:
-                search_pattern = os.path.join(expanded_path, pattern)
-                files = glob.glob(search_pattern)
-                
-                for file_path in files:
-                    if os.path.isfile(file_path) and not file_path.endswith('.pub'):
-                        key_info = self._analyze_private_key(file_path)
-                        if key_info:
-                            private_keys.append(key_info)
+            expanded_paths = glob.glob(os.path.expanduser(path))
+            for expanded_path in expanded_paths:
+                for pattern in key_patterns:
+                    search_pattern = os.path.join(expanded_path, pattern)
+                    files = glob.glob(search_pattern)
+                    for file_path in files:
+                        if os.path.isfile(file_path) and not file_path.endswith('.pub'):
+                            key_info = self._analyze_private_key(file_path)
+                            if key_info:
+                                private_keys.append(key_info)
         
         return private_keys
     
@@ -74,15 +75,15 @@ class SSHScanner:
         public_keys = []
         
         for path in self.scan_paths:
-            expanded_path = os.path.expanduser(path)
-            search_pattern = os.path.join(expanded_path, "*.pub")
-            files = glob.glob(search_pattern)
-            
-            for file_path in files:
-                if os.path.isfile(file_path):
-                    key_info = self._analyze_public_key(file_path)
-                    if key_info:
-                        public_keys.append(key_info)
+            expanded_paths = glob.glob(os.path.expanduser(path))
+            for expanded_path in expanded_paths:
+                search_pattern = os.path.join(expanded_path, "*.pub")
+                files = glob.glob(search_pattern)
+                for file_path in files:
+                    if os.path.isfile(file_path):
+                        key_info = self._analyze_public_key(file_path)
+                        if key_info:
+                            public_keys.append(key_info)
         
         return public_keys
     
@@ -95,23 +96,40 @@ class SSHScanner:
             # Check if key is encrypted
             is_encrypted = "ENCRYPTED" in content or "Proc-Type: 4,ENCRYPTED" in content
             
-            # Get file permissions
-            stat = os.stat(file_path)
-            permissions = oct(stat.st_mode)[-3:]
+            # Get file permissions and properly handle octal values
+            stat_info = os.stat(file_path)
+            permissions_octal = oct(stat_info.st_mode)[-3:]  # Get last 3 digits as string
+            permissions_int = stat_info.st_mode & 0o777  # Get permission bits as integer
             
-            # Check if permissions are too open
-            is_secure = permissions in ['600', '400']
+            # Check if permissions are secure (should be 600 or 400 for private keys)
+            secure_permissions = [0o600, 0o400]
+            is_secure = permissions_int in secure_permissions
+            
+            # Additional security checks
+            security_issues = []
+            if permissions_int & 0o044:  # Check if readable by group or others
+                security_issues.append("Key is readable by group or others")
+            if permissions_int & 0o022:  # Check if writable by group or others
+                security_issues.append("Key is writable by group or others")
+            if permissions_int & 0o111:  # Check if executable
+                security_issues.append("Key file is executable")
             
             return {
                 "path": file_path,
                 "encrypted": is_encrypted,
-                "permissions": permissions,
+                "permissions": permissions_octal,
+                "permissions_int": permissions_int,
                 "secure_permissions": is_secure,
+                "security_issues": security_issues,
                 "size": os.path.getsize(file_path),
-                "owner": self._get_file_owner(file_path)
+                "owner": self._get_file_owner(file_path),
+                "risk_level": "critical" if not is_encrypted and not is_secure else "medium" if not is_encrypted else "low"
             }
+        except (PermissionError, FileNotFoundError) as e:
+            self.logger.warning(f"Cannot access private key {file_path}: {e}")
+            return None
         except Exception as e:
-            print(f"Warning: Failed to analyze private key {file_path}: {e}")
+            self.logger.warning(f"Failed to analyze private key {file_path}: {e}")
             return None
     
     def _analyze_public_key(self, file_path: str) -> Dict[str, Any]:
@@ -136,7 +154,7 @@ class SSHScanner:
                     "owner": self._get_file_owner(file_path)
                 }
         except Exception as e:
-            print(f"Warning: Failed to analyze public key {file_path}: {e}")
+            self.logger.warning(f"Failed to analyze public key {file_path}: {e}")
             return None
         
         return None
@@ -312,14 +330,18 @@ class SSHScanner:
     def _get_key_fingerprint(self, key_data: str) -> str:
         """Get SSH key fingerprint"""
         try:
-            # Use ssh-keygen to get fingerprint
+            import tempfile
+            with tempfile.NamedTemporaryFile('w+', delete=False) as tmpfile:
+                tmpfile.write(key_data)
+                tmpfile.flush()
+                tmpfile_name = tmpfile.name
             result = subprocess.run(
-                ['ssh-keygen', '-l', '-f', '-'],
-                input=key_data.encode(),
+                ['ssh-keygen', '-l', '-f', tmpfile_name],
                 capture_output=True,
                 text=True,
                 timeout=5
             )
+            os.unlink(tmpfile_name)
             if result.returncode == 0 and result.stdout:
                 # Parse fingerprint from output
                 parts = result.stdout.strip().split()

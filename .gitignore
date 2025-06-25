@@ -1,13 +1,60 @@
-.venv
+# Virtual environments
 .venv/
+venv/
+env/
+
+# Python cache and compiled files
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.so
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Database files
 *.db
 *.sqlite
+*.sqlite3
+
+# Log files
 *.log
+logs/
+
+# Generated reports (keep directory but ignore contents)
 reports/*.json
 reports/*.html
+reports/*.csv
+
+# Documentation builds (keep source docs)
+# docs/
+
+# Environment and secret files
 .env
-.DS_Store 
+.env.local
+.env.*.local
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# Distribution and build
+dist/
+build/
+*.egg-info/ 

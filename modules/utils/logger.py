@@ -229,20 +229,44 @@ class JsonFormatter(logging.Formatter):
             'level': record.levelname,
             'logger': record.name,
             'message': record.getMessage(),
-            'module_name': getattr(record, 'module_name', record.module) if hasattr(record, 'module_name') else None,
             'function': record.funcName,
             'line': record.lineno
         }
         
-        # Добавляем дополнительные поля если есть
-        if hasattr(record, 'extra') and record.extra:
-            log_entry.update(record.extra)
+        # Add module name if available
+        if hasattr(record, 'module_name'):
+            log_entry['module_name'] = record.module_name
+        elif hasattr(record, 'module'):
+            log_entry['module_name'] = record.module
         
-        # Добавляем информацию об исключении если есть
+        # Add additional fields from record attributes (from extra parameter)
+        # Skip standard logging attributes
+        standard_attrs = {
+            'name', 'msg', 'args', 'levelname', 'levelno', 'pathname', 'filename',
+            'module', 'lineno', 'funcName', 'created', 'msecs', 'relativeCreated',
+            'thread', 'threadName', 'processName', 'process', 'exc_info', 'exc_text',
+            'stack_info', 'getMessage', 'extra'
+        }
+        
+        for key, value in record.__dict__.items():
+            if key not in standard_attrs and not key.startswith('_'):
+                try:
+                    # Ensure the value is JSON serializable
+                    json.dumps(value, default=str)
+                    log_entry[key] = value
+                except (TypeError, ValueError):
+                    log_entry[key] = str(value)
+        
+        # Add exception information if present
         if record.exc_info:
             log_entry['exception'] = self.formatException(record.exc_info)
         
-        return json.dumps(log_entry, default=str, ensure_ascii=False)
+        try:
+            return json.dumps(log_entry, default=str, ensure_ascii=False)
+        except (TypeError, ValueError) as e:
+            # Fallback to safe JSON serialization
+            safe_entry = {k: str(v) for k, v in log_entry.items()}
+            return json.dumps(safe_entry, ensure_ascii=False)
 
 
 def get_logger(name="credfinder", **kwargs) -> Logger:

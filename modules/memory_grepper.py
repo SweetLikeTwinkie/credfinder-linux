@@ -17,11 +17,37 @@ except ImportError:
     PSUTIL_AVAILABLE = False
     print("Warning: psutil not available. Memory scanning will be limited.")
 
+# Try to import yara, but handle gracefully if not available
+try:
+    import yara
+    YARA_AVAILABLE = True
+except ImportError:
+    YARA_AVAILABLE = False
+
 
 class MemoryGrepper:
     def __init__(self, config):
         self.config = config
         self.patterns = config.get("patterns", {})
+        # All memory/Volatility/YARA options are now read from config['modules']['memory']
+        memcfg = config.get("modules", {}).get("memory", {})
+        self.memory_dump_path = memcfg.get("memory_dump_path", "/dev/mem")
+        self.volatility_plugins = memcfg.get("volatility_plugins", [
+            "linux_envars", "linux_cmdline", "linux_bash", "linux_strings", "linux_yarascan", "linux_pslist"
+        ])
+        self.volatility_profile = memcfg.get("volatility_profile", "Linux")
+        self.yara_rules_path = memcfg.get("yara_rules_path")
+        self.yara_rules = None
+        from modules.utils.logger import get_logger
+        self.logger = get_logger("credfinder.memorygrepper")
+        if YARA_AVAILABLE and self.yara_rules_path and os.path.exists(self.yara_rules_path):
+            try:
+                self.yara_rules = yara.compile(filepath=self.yara_rules_path)
+            except Exception as e:
+                self.logger.warning(f"Failed to compile YARA rules: {e}")
+                self.yara_rules = None
+        elif self.yara_rules_path and not YARA_AVAILABLE:
+            self.logger.warning("YARA rules specified but yara-python is not installed.")
         
     def scan(self) -> Dict[str, Any]:
         """Main scan method"""
@@ -44,7 +70,7 @@ class MemoryGrepper:
             # Scan process command lines
             results["process_cmdline"] = self._scan_process_cmdline()
         else:
-            print("Warning: psutil not available, skipping process scanning")
+            self.logger.warning("psutil not available, skipping process scanning")
         
         # Scan /proc files (this doesn't require psutil)
         results["proc_files"] = self._scan_proc_files()
@@ -52,6 +78,8 @@ class MemoryGrepper:
         # Try Volatility if available
         if self._check_volatility():
             results["volatility_results"] = self._run_volatility_scan()
+        else:
+            results["volatility_results"] = {"error": "Volatility not found or not available"}
         
         return results
     
@@ -79,7 +107,7 @@ class MemoryGrepper:
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 continue
             except Exception as e:
-                print(f"Warning: Error scanning process {proc.pid if hasattr(proc, 'pid') else 'unknown'}: {e}")
+                self.logger.warning(f"Error scanning process {proc.pid if hasattr(proc, 'pid') else 'unknown'}: {e}")
                 continue
         
         return findings
@@ -109,7 +137,7 @@ class MemoryGrepper:
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 continue
             except Exception as e:
-                print(f"Warning: Error scanning process {proc.pid if hasattr(proc, 'pid') else 'unknown'}: {e}")
+                self.logger.warning(f"Error scanning process {proc.pid if hasattr(proc, 'pid') else 'unknown'}: {e}")
                 continue
         
         return findings
@@ -244,29 +272,78 @@ class MemoryGrepper:
                 try:
                     regex_matches = re.findall(pattern, content, re.IGNORECASE)
                     for match in regex_matches:
+                        match_value = self._extract_match_value(match)
+                        context = self._get_context(content, match_value)
+                        
                         matches.append({
                             "type": pattern_type,
                             "pattern": pattern,
-                            "match": match if isinstance(match, str) else match[0] if match else "",
-                            "context": self._get_context(content, match)
+                            "match": match_value,
+                            "context": context,
+                            "full_match": match  # Keep original match for debugging
                         })
-                except re.error:
+                except re.error as e:
+                    self.logger.warning(f"Invalid regex pattern '{pattern}': {e}")
+                    continue
+                except Exception as e:
+                    self.logger.warning(f"Error processing pattern '{pattern}': {e}")
                     continue
         
         return matches
     
-    def _get_context(self, content: str, match: str, context_size: int = 50) -> str:
-        """Get context around a match"""
+    def _extract_match_value(self, match) -> str:
+        """Extract meaningful value from regex match result"""
         try:
             if isinstance(match, str):
-                start = content.find(match)
-                if start != -1:
-                    start = max(0, start - context_size)
-                    end = min(len(content), start + len(match) + context_size)
-                    return content[start:end]
-        except:
-            pass
-        return ""
+                return match
+            elif isinstance(match, tuple):
+                # For regex groups, find the first non-empty group
+                for group in match:
+                    if group and isinstance(group, str) and group.strip():
+                        return group.strip()
+                # If no meaningful group found, join all groups
+                return ' '.join(str(g) for g in match if g)
+            elif isinstance(match, list):
+                # Handle list of matches
+                return str(match[0]) if match else ""
+            else:
+                return str(match)
+        except Exception as e:
+            self.logger.debug(f"Error extracting match value: {e}")
+            return str(match) if match else ""
+    
+    def _get_context(self, content: str, match_value: str, context_size: int = 50) -> str:
+        """Get context around a match with improved error handling"""
+        try:
+            if not match_value or not content:
+                return ""
+            
+            # Find the match in the content
+            match_pos = content.find(match_value)
+            if match_pos == -1:
+                # Try case-insensitive search
+                match_pos = content.lower().find(match_value.lower())
+                if match_pos == -1:
+                    return ""
+            
+            # Calculate context boundaries
+            start = max(0, match_pos - context_size)
+            end = min(len(content), match_pos + len(match_value) + context_size)
+            
+            context = content[start:end]
+            
+            # Clean up context (remove excessive whitespace, newlines)
+            context = ' '.join(context.split())
+            
+            # Truncate if still too long
+            if len(context) > context_size * 4:
+                context = context[:context_size * 4] + "..."
+            
+            return context
+            
+        except Exception as e:
+            self.logger.debug(f"Error getting context for match '{match_value}': {e}")
+            return f"Match: {match_value}"
     
     def _check_volatility(self) -> bool:
         """Check if Volatility is available"""
@@ -281,122 +358,111 @@ class MemoryGrepper:
         except (subprocess.TimeoutExpired, FileNotFoundError):
             return False
     
+    def _detect_volatility(self) -> str:
+        """Detect Volatility 3 (vol.py) or Volatility 2 (vol) CLI. Returns command or None."""
+        for cmd in ["vol.py", "vol", "volatility", "volatility3"]:
+            try:
+                result = subprocess.run([cmd, "--help"], capture_output=True, text=True, timeout=5)
+                if result.returncode == 0:
+                    return cmd
+            except (subprocess.TimeoutExpired, FileNotFoundError):
+                continue
+        return None
+    
     def _run_volatility_scan(self) -> Dict[str, Any]:
-        """Run Volatility memory analysis"""
-        results = {
-            "profiles": [],
-            "processes": [],
-            "envars": [],
-            "cmdline": [],
-            "error": None
-        }
-        
-        try:
-            # Get available profiles
-            profile_result = subprocess.run(
-                ['vol', '--info'],
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
-            
-            if profile_result.returncode == 0:
-                # Parse profiles (simplified)
-                results["profiles"] = ["Linux"]  # Default for Linux
-            
-            # Try to get process list
+        """Run Volatility memory analysis (real integration, configurable plugins).
+        All options are read from config['modules']['memory'].
+        For each plugin, also scan output for secrets using self.patterns and add a 'secrets' field.
+        If YARA is enabled, also add a 'yara_matches' field."""
+        results = {}
+        vol_cmd = self._detect_volatility()
+        if not vol_cmd:
+            results["error"] = "Volatility not found."
+            return results
+        dump_path = self.memory_dump_path
+        if not os.path.exists(dump_path):
+            results["error"] = f"Memory dump not found: {dump_path}"
+            return results
+        is_vol3 = "vol" in vol_cmd and ("vol.py" in vol_cmd or "volatility3" in vol_cmd)
+        for plugin in self.volatility_plugins:
+            key = plugin
             try:
-                proc_result = subprocess.run(
-                    ['vol', '-f', '/dev/mem', '--profile=Linux', 'linux_pslist'],
-                    capture_output=True,
-                    text=True,
-                    timeout=30
-                )
-                
-                if proc_result.returncode == 0:
-                    results["processes"] = self._parse_volatility_processes(proc_result.stdout)
-            except:
-                pass
-            
-            # Try to get environment variables
-            try:
-                env_result = subprocess.run(
-                    ['vol', '-f', '/dev/mem', '--profile=Linux', 'linux_environ'],
-                    capture_output=True,
-                    text=True,
-                    timeout=30
-                )
-                
-                if env_result.returncode == 0:
-                    results["envars"] = self._parse_volatility_envars(env_result.stdout)
-            except:
-                pass
-            
-            # Try to get command lines
-            try:
-                cmd_result = subprocess.run(
-                    ['vol', '-f', '/dev/mem', '--profile=Linux', 'linux_cmdline'],
-                    capture_output=True,
-                    text=True,
-                    timeout=30
-                )
-                
-                if cmd_result.returncode == 0:
-                    results["cmdline"] = self._parse_volatility_cmdline(cmd_result.stdout)
-            except:
-                pass
-        
-        except Exception as e:
-            results["error"] = str(e)
-        
+                if is_vol3:
+                    args = [vol_cmd, "-f", dump_path, f"linux.{plugin}"]
+                else:
+                    args = [vol_cmd, "-f", dump_path, "--profile=" + self.volatility_profile, plugin]
+                if is_vol3:
+                    args += ["--output", "json"]
+                proc = subprocess.run(args, capture_output=True, text=True, timeout=120)
+                plugin_result = None
+                if proc.returncode == 0:
+                    try:
+                        import json
+                        plugin_result = json.loads(proc.stdout)
+                    except Exception:
+                        plugin_result = proc.stdout.strip().splitlines()
+                else:
+                    plugin_result = {"error": proc.stderr.strip() or "Unknown error"}
+                # --- Pattern matching on plugin output ---
+                secrets = []
+                if isinstance(plugin_result, list):
+                    for line in plugin_result:
+                        secrets.extend(self._check_patterns(str(line)))
+                elif isinstance(plugin_result, dict):
+                    for v in plugin_result.values():
+                        if isinstance(v, str):
+                            secrets.extend(self._check_patterns(v))
+                        elif isinstance(v, list):
+                            for item in v:
+                                if isinstance(item, str):
+                                    secrets.extend(self._check_patterns(item))
+                                elif isinstance(item, dict):
+                                    for val in item.values():
+                                        if isinstance(val, str):
+                                            secrets.extend(self._check_patterns(val))
+                elif isinstance(plugin_result, str):
+                    secrets.extend(self._check_patterns(plugin_result))
+                # --- YARA matching on plugin output ---
+                yara_matches = []
+                if self.yara_rules:
+                    def scan_yara(data):
+                        try:
+                            matches = self.yara_rules.match(data=data)
+                            return [
+                                {
+                                    "rule": m.rule,
+                                    "strings": [(offset, s, v.decode(errors='replace') if isinstance(v, bytes) else v)
+                                                 for (offset, s, v) in m.strings]
+                                }
+                                for m in matches
+                            ]
+                        except Exception as e:
+                            return [{"error": str(e)}]
+                    if isinstance(plugin_result, list):
+                        for line in plugin_result:
+                            yara_matches.extend(scan_yara(str(line)))
+                    elif isinstance(plugin_result, dict):
+                        for v in plugin_result.values():
+                            if isinstance(v, str):
+                                yara_matches.extend(scan_yara(v))
+                            elif isinstance(v, list):
+                                for item in v:
+                                    if isinstance(item, str):
+                                        yara_matches.extend(scan_yara(item))
+                                    elif isinstance(item, dict):
+                                        for val in item.values():
+                                            if isinstance(val, str):
+                                                yara_matches.extend(scan_yara(val))
+                    elif isinstance(plugin_result, str):
+                        yara_matches.extend(scan_yara(plugin_result))
+                results[key] = {
+                    "output": plugin_result,
+                    "secrets": secrets,
+                    "yara_matches": yara_matches
+                }
+            except Exception as e:
+                results[key] = {"error": str(e), "secrets": [], "yara_matches": []}
         return results
-    
-    def _parse_volatility_processes(self, output: str) -> List[Dict[str, Any]]:
-        """Parse Volatility process list output"""
-        processes = []
-        
-        for line in output.strip().split('\n'):
-            if line and not line.startswith('Volatility'):
-                parts = line.split()
-                if len(parts) >= 4:
-                    processes.append({
-                        "pid": parts[0],
-                        "ppid": parts[1],
-                        "name": parts[2],
-                        "cmdline": ' '.join(parts[3:])
-                    })
-        
-        return processes
-    
-    def _parse_volatility_envars(self, output: str) -> List[Dict[str, Any]]:
-        """Parse Volatility environment variables output"""
-        envars = []
-        
-        for line in output.strip().split('\n'):
-            if '=' in line and not line.startswith('Volatility'):
-                parts = line.split('=', 1)
-                if len(parts) == 2:
-                    envars.append({
-                        "variable": parts[0].strip(),
-                        "value": parts[1].strip()
-                    })
-        
-        return envars
-    
-    def _parse_volatility_cmdline(self, output: str) -> List[Dict[str, Any]]:
-        """Parse Volatility command line output"""
-        cmdlines = []
-        
-        for line in output.strip().split('\n'):
-            if line and not line.startswith('Volatility'):
-                parts = line.split()
-                if len(parts) >= 2:
-                    cmdlines.append({
-                        "pid": parts[0],
-                        "cmdline": ' '.join(parts[1:])
-                    })
-        
-        return cmdlines
     
     def search_specific_processes(self, process_names: List[str]) -> List[Dict[str, Any]]:
         """Search for secrets in specific processes"""

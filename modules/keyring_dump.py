@@ -8,12 +8,15 @@ import os
 import subprocess
 import json
 import dbus
+import re
 from typing import List, Dict, Any
+from modules.utils.logger import get_logger
 
 
 class KeyringDump:
     def __init__(self, config):
         self.config = config
+        self.logger = get_logger("credfinder.keyringdump")
         
     def dump(self) -> Dict[str, Any]:
         """Main dump method"""
@@ -40,6 +43,32 @@ class KeyringDump:
         
         return results
     
+    def _validate_wallet_name(self, wallet_name: str) -> bool:
+        """Safely validate wallet name to prevent command injection"""
+        if not wallet_name:
+            return False
+        
+        # Only allow alphanumeric characters, hyphens, and underscores
+        # Maximum length of 64 characters to prevent buffer overflow
+        if len(wallet_name) > 64:
+            return False
+            
+        # Use strict regex pattern
+        if not re.match(r'^[a-zA-Z0-9_-]+$', wallet_name):
+            return False
+            
+        # Prevent common injection patterns
+        dangerous_patterns = [
+            ';', '|', '&', '$', '`', '(', ')', '<', '>', 
+            '\n', '\r', '\t', '"', "'", '\\', ' '
+        ]
+        
+        for pattern in dangerous_patterns:
+            if pattern in wallet_name:
+                return False
+                
+        return True
+    
     def _detect_keyrings(self) -> List[str]:
         """Detect available keyrings on the system"""
         available = []
@@ -56,6 +85,8 @@ class KeyringDump:
                 available.append("gnome")
         except (subprocess.TimeoutExpired, FileNotFoundError):
             pass
+        except Exception as e:
+            self.logger.warning(f"Error checking GNOME keyring: {e}")
         
         # Check for KWallet
         try:
@@ -69,6 +100,8 @@ class KeyringDump:
                 available.append("kwallet")
         except (subprocess.TimeoutExpired, FileNotFoundError):
             pass
+        except Exception as e:
+            self.logger.warning(f"Error checking KWallet: {e}")
         
         # Check for secret-tool
         try:
@@ -82,6 +115,8 @@ class KeyringDump:
                 available.append("secret-tool")
         except (subprocess.TimeoutExpired, FileNotFoundError):
             pass
+        except Exception as e:
+            self.logger.warning(f"Error checking secret-tool: {e}")
         
         return available
     
@@ -111,6 +146,7 @@ class KeyringDump:
         except subprocess.TimeoutExpired:
             results["error"] = "Timeout while accessing GNOME Keyring"
         except Exception as e:
+            self.logger.error(f"Error accessing GNOME keyring: {e}")
             results["error"] = str(e)
         
         return results
@@ -136,8 +172,11 @@ class KeyringDump:
             if result.returncode == 0:
                 wallets = []
                 for line in result.stdout.strip().split('\n'):
-                    if line.strip():
-                        wallets.append(line.strip())
+                    line = line.strip()
+                    if line and self._validate_wallet_name(line):
+                        wallets.append(line)
+                    elif line:
+                        self.logger.warning(f"Invalid wallet name detected and skipped: {line}")
                 
                 results["wallets"] = wallets
                 
@@ -145,7 +184,12 @@ class KeyringDump:
                 if wallets:
                     default_wallet = wallets[0]  # Usually the first one is default
                     
-                    # List folders in the wallet
+                    # Additional validation (defense in depth)
+                    if not self._validate_wallet_name(default_wallet):
+                        results["error"] = f"Invalid wallet name: {default_wallet}"
+                        return results
+                    
+                    # List folders in the wallet - use explicit arguments to prevent injection
                     folder_result = subprocess.run(
                         ['kwallet-query', '--folder', 'Passwords', '--show-password', default_wallet],
                         capture_output=True,
@@ -158,12 +202,15 @@ class KeyringDump:
                         results["items"] = items
                     else:
                         results["error"] = f"Failed to access wallet: {folder_result.stderr}"
+                else:
+                    results["error"] = "No valid wallets found"
             else:
                 results["error"] = f"Failed to list wallets: {result.stderr}"
         
         except subprocess.TimeoutExpired:
             results["error"] = "Timeout while accessing KWallet"
         except Exception as e:
+            self.logger.error(f"Error accessing KWallet: {e}")
             results["error"] = str(e)
         
         return results
@@ -193,6 +240,7 @@ class KeyringDump:
         except subprocess.TimeoutExpired:
             results["error"] = "Timeout while using secret-tool"
         except Exception as e:
+            self.logger.error(f"Error using secret-tool: {e}")
             results["error"] = str(e)
         
         return results
@@ -297,6 +345,7 @@ class KeyringDump:
                 results["collections"].append(collection_info)
         
         except Exception as e:
+            self.logger.error(f"D-Bus access failed: {e}")
             results["error"] = f"D-Bus access failed: {str(e)}"
         
         return results
@@ -317,6 +366,11 @@ class KeyringDump:
         services = self._get_common_services()
         
         for service in services:
+            # Validate service name to prevent injection
+            if not re.match(r'^[a-zA-Z0-9_-]+$', service):
+                self.logger.warning(f"Invalid service name skipped: {service}")
+                continue
+                
             try:
                 result = subprocess.run(
                     ['secret-tool', 'search', 'service', service],
@@ -331,6 +385,9 @@ class KeyringDump:
                         results[service] = items
             
             except (subprocess.TimeoutExpired, FileNotFoundError):
+                continue
+            except Exception as e:
+                self.logger.warning(f"Error searching for service {service}: {e}")
                 continue
         
         return results 
