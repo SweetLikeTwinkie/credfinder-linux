@@ -4,9 +4,7 @@
       "~/.ssh/",
       "/etc/ssh/",
       "/home/*/.ssh/",
-      "/root/.ssh/",
-      "/var/lib/*/ssh/",
-      "/opt/*/ssh/"
+      "/root/.ssh/"
     ],
     "browsers": {
       "chrome": [
@@ -15,18 +13,13 @@
         "~/.config/brave-browser/Default/",
         "/home/*/.config/google-chrome/Default/",
         "/home/*/.config/chromium/Default/",
-        "/home/*/.config/brave-browser/Default/",
-        "/root/.config/google-chrome/Default/",
-        "/root/.config/chromium/Default/",
-        "/root/.config/brave-browser/Default/"
+        "/home/*/.config/brave-browser/Default/"
       ],
       "firefox": [
         "~/.mozilla/firefox/*.default*/",
         "~/.mozilla/firefox/*.default-release/",
         "/home/*/.mozilla/firefox/*.default*/",
-        "/home/*/.mozilla/firefox/*.default-release/",
-        "/root/.mozilla/firefox/*.default*/",
-        "/root/.mozilla/firefox/*.default-release/"
+        "/home/*/.mozilla/firefox/*.default-release/"
       ]
     },
     "config_files": [
@@ -38,6 +31,10 @@
       "~/.netrc",
       "~/.aws/credentials",
       "~/.aws/config",
+      "~/.config/gcloud/credentials.db",
+      "~/.azure/credentials",
+      "~/.docker/config.json",
+      "~/.kube/config",
       "/home/*/.bash_history",
       "/home/*/.zsh_history",
       "/home/*/.git-credentials",
@@ -46,224 +43,251 @@
       "/home/*/.netrc",
       "/home/*/.aws/credentials",
       "/home/*/.aws/config",
-      "/root/.bash_history",
-      "/root/.zsh_history",
-      "/root/.git-credentials",
-      "/root/.npmrc",
-      "/root/.pypirc",
-      "/root/.netrc",
-      "/root/.aws/credentials",
-      "/root/.aws/config"
+      "/home/*/.docker/config.json",
+      "/home/*/.kube/config"
     ],
-    "dotfiles": [
+    "common_files": [
+      "/tmp/*.env*",
+      "/tmp/*.conf*",
+      "/var/tmp/*.env*",
+      "/var/tmp/*.conf*",
+      "~/Downloads/*.env*",
+      "~/Downloads/*.config*",
+      "~/Desktop/*.env*"
+    ],
+    "history_files": [
+      "~/.bash_history",
+      "~/.zsh_history", 
+      "~/.sh_history",
+      "~/.history"
+    ],
+    "env_file_patterns": [
       "~/.env*",
-      "~/.config/*/config.yml",
-      "~/.config/*/secrets.json",
-      "~/.config/*/settings.json",
-      "/home/*/.env*",
-      "/home/*/.config/*/config.yml",
-      "/home/*/.config/*/secrets.json",
-      "/home/*/.config/*/settings.json",
-      "/root/.env*",
-      "/root/.config/*/config.yml",
-      "/root/.config/*/secrets.json",
-      "/root/.config/*/settings.json",
-      "/etc/environment",
-      "/etc/default/*",
-      "/var/log/*/config*",
-      "/opt/*/config*",
-      "/srv/*/config*"
+      "~/.config/*/.env*",
+      "~/.local/share/*/.env*",
+      "~/projects/*/.env*",
+      "~/workspace/*/.env*"
+    ],
+    "git_config_paths": [
+      "~/.git-credentials",
+      "~/.gitconfig",
+      "~/.config/git/config"
     ]
   },
   "patterns": {
     "aws_keys": [
       "AKIA[0-9A-Z]{16}",
-      "aws_access_key_id\\s*=\\s*[A-Z0-9]{20}",
-      "aws_secret_access_key\\s*=\\s*[A-Za-z0-9/+=]{40}"
+      "aws_access_key_id\\s*[=:]\\s*[A-Z0-9]{20}",
+      "aws_secret_access_key\\s*[=:]\\s*[A-Za-z0-9/+=]{40}"
     ],
     "api_tokens": [
-      "sk_[a-zA-Z0-9]{24}",
-      "pk_[a-zA-Z0-9]{24}",
+      "sk_[a-zA-Z0-9]{24,}",
+      "pk_[a-zA-Z0-9]{24,}",
       "ghp_[a-zA-Z0-9]{36}",
       "gho_[a-zA-Z0-9]{36}",
       "ghu_[a-zA-Z0-9]{36}",
       "ghs_[a-zA-Z0-9]{36}",
-      "ghr_[a-zA-Z0-9]{36}"
+      "ghr_[a-zA-Z0-9]{36}",
+      "xoxb-[0-9]{12}-[0-9]{12}-[a-zA-Z0-9]{24}",
+      "xoxp-[0-9]{12}-[0-9]{12}-[a-zA-Z0-9]{24}",
+      "discord.*[a-zA-Z0-9]{24}\\.[a-zA-Z0-9]{6}\\.[a-zA-Z0-9_\\-]{27}",
+      "AIza[0-9A-Za-z\\-_]{35}"
     ],
     "jwt_tokens": [
       "eyJ[A-Za-z0-9-_=]+\\.[A-Za-z0-9-_=]+\\.?[A-Za-z0-9-_.+/=]*"
     ],
     "passwords": [
-      "password\\s*[:=]\\s*[^\\s]+",
-      "passwd\\s*[:=]\\s*[^\\s]+",
-      "secret\\s*[:=]\\s*[^\\s]+"
+      "password\\s*[=:]\\s*[^\\s\"']+",
+      "passwd\\s*[=:]\\s*[^\\s\"']+",
+      "secret\\s*[=:]\\s*[^\\s\"']+",
+      "key\\s*[=:]\\s*[^\\s\"']+",
+      "token\\s*[=:]\\s*[^\\s\"']+"
+    ],
+    "database_urls": [
+      "mysql://[^\\s\"']+",
+      "postgresql://[^\\s\"']+",
+      "mongodb://[^\\s\"']+",
+      "redis://[^\\s\"']+",
+      "sqlite://[^\\s\"']+"
+    ],
+    "private_keys": [
+      "-----BEGIN (RSA |DSA |EC |OPENSSH )?PRIVATE KEY-----",
+      "-----BEGIN PGP PRIVATE KEY BLOCK-----"
+    ],
+    "credentials": [
+      "GITHUB_TOKEN[=:\\s]+[a-zA-Z0-9_]+",
+      "SLACK_TOKEN[=:\\s]+[a-zA-Z0-9_]+",
+      "TWITTER_.*[=:\\s]+[a-zA-Z0-9_]+",
+      "FACEBOOK_.*[=:\\s]+[a-zA-Z0-9_]+",
+      "GOOGLE_.*[=:\\s]+[a-zA-Z0-9_]+",
+      "DATABASE_URL[=:\\s]+[^\\s\"']+"
     ]
   },
-  "execution": {
-    "default_strategy": "priority",
-    "available_strategies": ["priority", "custom", "time-optimized", "dependency-aware"],
-    "default_mode": "parallel",
-    "max_workers": 3,
-    "module_timeout": 300,
-    "global_timeout": 1800,
-    "default_order": ["ssh", "dotfiles", "history", "browser", "memory", "keyring"],
-    "fast_modules": ["ssh", "dotfiles", "history"],
-    "slow_modules": ["memory", "keyring"],
-    "privileged_modules": ["memory"],
-    "resource_intensive_modules": ["browser", "memory"],
-    "continue_on_error": true,
-    "retry_failed_modules": false,
-    "max_retries": 1
+  "module_settings": {
+    "ssh": {
+      "key_patterns": [
+        "id_rsa*", "id_dsa*", "id_ecdsa*", "id_ed25519*",
+        "id_xmss*", "ssh_host_*_key"
+      ],
+      "secure_permissions": [384, 256],
+      "key_data_truncate_length": 50,
+      "ssh_agent_timeout": 5,
+      "fingerprint_timeout": 5
+    },
+    "browser": {
+      "chrome_default_password": "peanuts",
+      "chrome_salt": "saltysalt",
+      "chrome_key_length": 16,
+      "chrome_iterations": 1,
+      "chrome_iv_length": 16,
+      "chrome_version_prefix_length": 3,
+      "secret_tool_timeout": 5,
+      "kwallet_timeout": 5,
+      "database_files": {
+        "chrome_passwords": "Login Data",
+        "chrome_cookies": "Cookies", 
+        "chrome_autofill": "Web Data",
+        "firefox_key_db": "key4.db",
+        "firefox_logins": "logins.json"
+      },
+      "secret_storage_labels": [
+        "Chrome Safe Storage",
+        "Chromium Safe Storage"
+      ],
+      "max_copy_retries": 3
+    },
+    "dotfile": {
+      "max_file_size_bytes": 1048576,
+      "content_preview_length": 100,
+      "context_size": 25
+    },
+    "file_grep": {
+      "file_extensions": [
+        "*.env", "*.ini", "*.conf", "*.config", 
+        "*.json", "*.yaml", "*.yml", "*.properties"
+      ],
+      "search_base_paths": [
+        "~/.config/", "~/.local/", "/tmp/", "/var/tmp/"
+      ],
+      "max_files_per_pattern": 10,
+      "max_files_common_location": 5,
+      "max_file_size_bytes": 1048576,
+      "max_file_read_bytes": 10000,
+      "max_common_file_read_bytes": 5000,
+      "process_scan_timeout": 10,
+      "command_preview_length": 100,
+      "context_size": 40,
+      "min_match_length": 5,
+      "binary_detection_chunk_size": 512
+    },
+    "history": {
+      "max_file_size_bytes": 5242880,
+      "context_size": 20,
+      "risk_patterns": {
+        "critical": ["aws_keys", "api_tokens", "jwt_tokens"],
+        "medium": ["passwords"],
+        "low": []
+      }
+    },
+    "keyring": {
+      "version_check_timeout": 5,
+      "keyring_access_timeout": 30,
+      "wallet_access_timeout": 15,
+      "max_wallet_name_length": 64,
+      "common_services": [
+        "chrome", "chromium", "firefox", "brave",
+        "ssh", "git", "aws", "docker", "kubernetes",
+        "mysql", "postgresql", "redis", "mongodb",
+        "vpn", "wifi", "network", "email", "imap", "smtp",
+        "ftp", "sftp", "webdav", "dropbox", "onedrive", "google-drive"
+      ]
+    }
   },
-  "security": {
-    "max_file_size": 104857600,
-    "min_free_space": 104857600,
-    "safe_file_permissions": "0o640",
-    "safe_dir_permissions": "0o750",
-    "allowed_output_dirs": [
-      "./reports",
-      "/tmp/credfinder",
-      "~/credfinder-results"
-    ],
-    "forbidden_paths": [
-      "/dev",
-      "/proc/*/mem",
-      "/sys/kernel",
-      "/sys/devices"
-    ],
-    "validate_symlinks": true,
-    "validate_devices": true,
-    "atomic_writes": true,
-    "secure_temp_files": true,
-    "check_disk_space": true,
-    "enforce_permissions": true
-  },
+
   "opsec": {
-    "minimal_logging": true,
+    "minimal_logging": false,
     "no_network_calls": true,
     "clean_exit": true,
     "file_permissions": "600",
     "log_to_file": false,
-    "log_file": "/tmp/credfinder.log",
-    "hide_process_name": false,
-    "delete_temp_files": true,
-    "secure_memory": false
+    "delete_temp_files": true
   },
   "output": {
-    "formats": ["json", "html", "csv", "console"],
+    "formats": ["json", "html", "console"],
     "default_format": "json",
-    "report_template": "templates/report.html",
     "output_dir": "./reports",
     "compress_results": false,
-    "encrypt_results": false,
     "include_metadata": true,
-    "include_execution_stats": true,
+    "include_raw_data": false,
+    "json_indent": 0,
     "timestamp_format": "%Y%m%d_%H%M%S"
-  },
-  "error_handling": {
-    "continue_on_module_failure": true,
-    "log_full_tracebacks": true,
-    "retry_on_timeout": false,
-    "graceful_shutdown": true,
-    "cleanup_on_error": true,
-    "report_partial_results": true
   },
   "modules": {
     "ssh": {
       "enabled": true,
       "priority": 1,
-      "timeout": 60,
+      "timeout": 30,
       "parallel_safe": true,
       "requires_privileges": false,
       "estimated_time": "fast",
       "resource_intensive": false,
-      "dependencies": [],
-      "retry_on_failure": false
+      "dependencies": []
     },
     "dotfiles": {
       "enabled": true,
       "priority": 2,
-      "timeout": 120,
-      "parallel_safe": true,
-      "requires_privileges": false,
-      "estimated_time": "fast",
-      "resource_intensive": false,
-      "dependencies": [],
-      "retry_on_failure": false
-    },
-    "history": {
-      "enabled": true,
-      "priority": 3,
       "timeout": 60,
       "parallel_safe": true,
       "requires_privileges": false,
       "estimated_time": "fast",
       "resource_intensive": false,
-      "dependencies": ["ssh", "dotfiles"],
-      "retry_on_failure": false
+      "dependencies": []
+    },
+    "history": {
+      "enabled": true,
+      "priority": 3,
+      "timeout": 30,
+      "parallel_safe": true,
+      "requires_privileges": false,
+      "estimated_time": "fast",
+      "resource_intensive": false,
+      "dependencies": []
     },
     "browser": {
       "enabled": true,
       "priority": 4,
-      "timeout": 180,
+      "timeout": 120,
       "parallel_safe": false,
       "requires_privileges": false,
       "estimated_time": "medium",
-      "resource_intensive": true,
-      "dependencies": ["history"],
-      "retry_on_failure": true
-    },
-    "memory": {
-      "enabled": true,
-      "priority": 5,
-      "timeout": 600,
-      "parallel_safe": true,
-      "requires_privileges": true,
-      "estimated_time": "slow",
-      "resource_intensive": true,
-      "dependencies": ["browser"],
-      "retry_on_failure": false,
-      "memory_dump_path": "/dev/mem",
-      "volatility_plugins": [
-        "linux_envars",
-        "linux_cmdline",
-        "linux_bash",
-        "linux_strings",
-        "linux_yarascan",
-        "linux_pslist"
-      ],
-      "volatility_profile": "Linux",
-      "yara_rules_path": "rules/secrets.yar"
+      "resource_intensive": false,
+      "dependencies": []
     },
     "keyring": {
       "enabled": true,
-      "priority": 6,
-      "timeout": 300,
+      "priority": 5,
+      "timeout": 60,
       "parallel_safe": false,
       "requires_privileges": false,
-      "estimated_time": "slow",
+      "estimated_time": "medium",
       "resource_intensive": false,
-      "dependencies": ["memory"],
-      "retry_on_failure": true
+      "dependencies": []
+    },
+    "file_grep": {
+      "enabled": true,
+      "priority": 6,
+      "timeout": 90,
+      "parallel_safe": true,
+      "requires_privileges": false,
+      "estimated_time": "medium",
+      "resource_intensive": false,
+      "dependencies": []
     }
-  },
-  "performance": {
-    "max_concurrent_modules": 3,
-    "memory_limit_mb": 1024,
-    "cpu_limit_percent": 80,
-    "io_limit_mbps": 100,
-    "enable_profiling": false,
-    "profile_output": "./reports/profile.json"
   },
   "logging": {
     "level": "INFO",
     "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    "file_logging": false,
     "console_logging": true,
-    "log_rotation": true,
-    "max_log_size_mb": 10,
-    "backup_count": 3,
-    "use_colors": true,
-    "structured_logging": true
+    "use_colors": true
   }
 } 

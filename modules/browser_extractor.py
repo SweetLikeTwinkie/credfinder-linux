@@ -115,7 +115,7 @@ class BrowserExtractor:
         # Create a temporary copy of the database using safe copy
         temp_db_path = None
         try:
-            temp_db_path = self._safe_copy_database(login_data_path)
+            temp_db_path = self._create_safe_database_copy(login_data_path)
             if not temp_db_path:
                 return passwords
             
@@ -171,7 +171,7 @@ class BrowserExtractor:
         
         temp_db_path = None
         try:
-            temp_db_path = self._safe_copy_database(cookies_path)
+            temp_db_path = self._create_safe_database_copy(cookies_path)
             if not temp_db_path:
                 return cookies
             
@@ -229,7 +229,7 @@ class BrowserExtractor:
         
         temp_db_path = None
         try:
-            temp_db_path = self._safe_copy_database(web_data_path)
+            temp_db_path = self._create_safe_database_copy(web_data_path)
             if not temp_db_path:
                 return autofill
             
@@ -568,13 +568,16 @@ class BrowserExtractor:
             if not resolved_path.is_dir():
                 return False
             
-            # Prevent path traversal - ensure path doesn't contain suspicious patterns
+            # Prevent path traversal - ensure path doesn't contain truly dangerous patterns
             path_str = str(resolved_path)
-            dangerous_patterns = ['..', '~/', '/tmp/', '/dev/', '/proc/', '/sys/']
+            dangerous_patterns = ['..', '/dev/', '/proc/', '/sys/']
             
             for pattern in dangerous_patterns:
                 if pattern in path_str:
                     return False
+            
+            # BUGFIX: Don't reject legitimate home and temp paths
+            # ~/. and /tmp/ are actually safe for browser profile scanning
             
             # Check if path is within allowed directories (home directories)
             allowed_prefixes = [
@@ -596,7 +599,7 @@ class BrowserExtractor:
             self.logger.warning(f"Path validation error for {path}: {e}")
             return False
     
-    def _safe_copy_database(self, source_path: str, max_retries: int = 3) -> Optional[str]:
+    def _create_safe_database_copy(self, source_path: str, max_retries: int = 3) -> Optional[str]:
         """Safely copy database file with proper validation and locking"""
         import tempfile
         import time
@@ -743,7 +746,7 @@ class BrowserExtractor:
         
         temp_db_path = None
         try:
-            temp_db_path = self._safe_copy_database(cookies_sqlite_path)
+            temp_db_path = self._create_safe_database_copy(cookies_sqlite_path)
             if not temp_db_path:
                 return cookies
             

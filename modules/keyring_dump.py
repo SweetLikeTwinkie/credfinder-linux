@@ -14,12 +14,17 @@ from modules.utils.logger import get_logger
 
 
 class KeyringDump:
+    # Timeout constants for external command execution (in seconds)
+    KEYRING_VERSION_CHECK_TIMEOUT = 5
+    KEYRING_ACCESS_TIMEOUT = 30
+    WALLET_ACCESS_TIMEOUT = 15
+    
     def __init__(self, config):
         self.config = config
         self.logger = get_logger("credfinder.keyringdump")
         
-    def dump(self) -> Dict[str, Any]:
-        """Main dump method"""
+    def extract_credentials(self) -> Dict[str, Any]:
+        """Extract credentials from all available keyring systems"""
         results = {
             "gnome_keyring": {},
             "kwallet": {},
@@ -79,7 +84,7 @@ class KeyringDump:
                 ['gnome-keyring-daemon', '--version'],
                 capture_output=True,
                 text=True,
-                timeout=5
+                timeout=self.KEYRING_VERSION_CHECK_TIMEOUT
             )
             if result.returncode == 0:
                 available.append("gnome")
@@ -94,7 +99,7 @@ class KeyringDump:
                 ['kwallet-query', '--version'],
                 capture_output=True,
                 text=True,
-                timeout=5
+                timeout=self.KEYRING_VERSION_CHECK_TIMEOUT
             )
             if result.returncode == 0:
                 available.append("kwallet")
@@ -109,7 +114,7 @@ class KeyringDump:
                 ['secret-tool', '--version'],
                 capture_output=True,
                 text=True,
-                timeout=5
+                timeout=self.KEYRING_VERSION_CHECK_TIMEOUT
             )
             if result.returncode == 0:
                 available.append("secret-tool")
@@ -134,7 +139,7 @@ class KeyringDump:
                 ['secret-tool', 'search', 'service', '*'],
                 capture_output=True,
                 text=True,
-                timeout=30
+                timeout=self.KEYRING_ACCESS_TIMEOUT
             )
             
             if result.returncode == 0:
@@ -194,7 +199,7 @@ class KeyringDump:
                         ['kwallet-query', '--folder', 'Passwords', '--show-password', default_wallet],
                         capture_output=True,
                         text=True,
-                        timeout=15
+                        timeout=self.WALLET_ACCESS_TIMEOUT
                     )
                     
                     if folder_result.returncode == 0:
@@ -228,7 +233,7 @@ class KeyringDump:
                 ['secret-tool', 'search', 'service', '*'],
                 capture_output=True,
                 text=True,
-                timeout=30
+                timeout=self.KEYRING_ACCESS_TIMEOUT
             )
             
             if result.returncode == 0:
@@ -360,34 +365,4 @@ class KeyringDump:
             "ftp", "sftp", "webdav", "dropbox", "onedrive", "google-drive"
         ]
     
-    def search_specific_services(self) -> Dict[str, Any]:
-        """Search for specific common services"""
-        results = {}
-        services = self._get_common_services()
-        
-        for service in services:
-            # Validate service name to prevent injection
-            if not re.match(r'^[a-zA-Z0-9_-]+$', service):
-                self.logger.warning(f"Invalid service name skipped: {service}")
-                continue
-                
-            try:
-                result = subprocess.run(
-                    ['secret-tool', 'search', 'service', service],
-                    capture_output=True,
-                    text=True,
-                    timeout=10
-                )
-                
-                if result.returncode == 0 and result.stdout.strip():
-                    items = self._parse_secret_tool_output(result.stdout)
-                    if items:
-                        results[service] = items
-            
-            except (subprocess.TimeoutExpired, FileNotFoundError):
-                continue
-            except Exception as e:
-                self.logger.warning(f"Error searching for service {service}: {e}")
-                continue
-        
-        return results 
+ 

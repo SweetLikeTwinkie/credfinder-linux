@@ -136,61 +136,6 @@ class Logger:
         """Exception logging with stack trace"""
         self.logger.error(message, exc_info=exc_info, extra=self._prepare_extra(extra))
     
-    def log_module_start(self, module_name: str):
-        """Special method for logging the start of module execution"""
-        self.info(f"Starting module: {module_name}", {"module_name": module_name, "event": "start"})
-    
-    def log_module_success(self, module_name: str, execution_time: float, findings_count: int = 0):
-        """Special method for logging successful module completion"""
-        self.success(
-            f"Module {module_name} completed successfully in {execution_time:.2f}s",
-            {
-                "module_name": module_name,
-                "event": "success",
-                "execution_time": execution_time,
-                "findings_count": findings_count
-            }
-        )
-    
-    def log_module_error(self, module_name: str, error: Exception, execution_time: float = 0):
-        """Special method for logging module error"""
-        self.error(
-            f"Module {module_name} failed: {str(error)}",
-            {
-                "module_name": module_name,
-                "event": "error",
-                "error_type": type(error).__name__,
-                "error_message": str(error),
-                "execution_time": execution_time
-            }
-        )
-        
-        # Log full stack trace in debug mode
-        if not self.minimal_logging:
-            self.exception(f"Full traceback for {module_name}")
-    
-    def log_module_skip(self, module_name: str, reason: str):
-        """Special method for logging module skip"""
-        self.warning(
-            f"Module {module_name} skipped: {reason}",
-            {
-                "module_name": module_name,
-                "event": "skip",
-                "reason": reason
-            }
-        )
-    
-    def log_module_timeout(self, module_name: str, timeout: int):
-        """Special method for logging module timeout"""
-        self.error(
-            f"Module {module_name} timed out after {timeout}s",
-            {
-                "module_name": module_name,
-                "event": "timeout",
-                "timeout": timeout
-            }
-        )
-    
     def _prepare_extra(self, extra: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         """Prepares extra data for logging"""
         if extra is None:

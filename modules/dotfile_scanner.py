@@ -1,7 +1,21 @@
 #!/usr/bin/env python3
 """
 Dotfile Credential Scanner Module
-Scans configuration files for secrets
+
+This module scans various configuration files and dotfiles for embedded credentials.
+It's designed to find secrets that developers often accidentally store in config files,
+environment files, and other configuration locations.
+
+Key Features:
+- Scans multiple types of configuration files (env, git, AWS, Docker, K8s, etc.)
+- Pattern-based credential detection
+- Safe file reading with size limits
+- Categorized scanning for different config types
+- Detailed statistics and error tracking
+
+Contributors: This module processes many different file formats safely.
+All file operations include size limits and proper error handling.
+The modular approach makes it easy to add support for new configuration types.
 """
 
 import os
@@ -21,8 +35,28 @@ class DotfileScanner:
         self.patterns = config.get("patterns", {})
         self.logger = get_logger("credfinder.dotfilescanner")
         
+        # Load dotfile-specific settings from config to avoid hardcoded values
+        self.dotfile_settings = config.get("module_settings", {}).get("dotfile", {})
+        self.max_file_size_bytes = self.dotfile_settings.get("max_file_size_bytes", 10485760)  # 10MB
+        self.content_preview_length = self.dotfile_settings.get("content_preview_length", 500)
+        self.context_size = self.dotfile_settings.get("context_size", 50)
+        
     def scan(self) -> Dict[str, Any]:
-        """Main scan method"""
+        """
+        Main scan method that coordinates all dotfile and configuration scanning.
+        
+        This method orchestrates scanning of different configuration file types:
+        - General config files
+        - Environment files (.env)
+        - Git configurations
+        - Cloud provider configs (AWS, etc.)
+        - Container configs (Docker, Kubernetes)
+        - Database configurations
+        - Other miscellaneous configs
+        
+        Returns:
+            Dict with categorized results and scan statistics
+        """
         results = {
             "config_files": [],
             "env_files": [],
@@ -42,31 +76,17 @@ class DotfileScanner:
             }
         }
         
-        # Scan config files
+        # Scan different types of configuration files
         results["config_files"] = self._scan_config_files(results["scan_stats"])
-        
-        # Scan .env files
         results["env_files"] = self._scan_env_files(results["scan_stats"])
-        
-        # Scan Git configurations
         results["git_configs"] = self._scan_git_configs(results["scan_stats"])
-        
-        # Scan AWS configurations
         results["aws_configs"] = self._scan_aws_configs(results["scan_stats"])
-        
-        # Scan Docker configurations
         results["docker_configs"] = self._scan_docker_configs(results["scan_stats"])
-        
-        # Scan Kubernetes configurations
         results["kubernetes_configs"] = self._scan_kubernetes_configs(results["scan_stats"])
-        
-        # Scan database configurations
         results["database_configs"] = self._scan_database_configs(results["scan_stats"])
-        
-        # Scan other configurations
         results["other_configs"] = self._scan_other_configs(results["scan_stats"])
         
-        # Log summary statistics
+        # Log summary statistics for monitoring and debugging
         stats = results["scan_stats"]
         self.logger.info(f"Dotfile scan completed: {stats['files_scanned']} files scanned, "
                         f"{stats['files_with_findings']} with findings, "
@@ -77,7 +97,18 @@ class DotfileScanner:
         return results
     
     def _scan_config_files(self, stats: Dict[str, int]) -> List[Dict[str, Any]]:
-        """Scan general configuration files"""
+        """
+        Scan general configuration files for credentials.
+        
+        This method processes the basic config file paths defined in the configuration.
+        These are typically shell history files and common config locations.
+        
+        Args:
+            stats: Statistics dictionary to update during scanning
+            
+        Returns:
+            List of config files containing credential patterns
+        """
         findings = []
         config_paths = self.scan_paths.get("config_files", [])
         
@@ -93,11 +124,17 @@ class DotfileScanner:
                         pattern_matches = self._check_patterns(content)
                         if pattern_matches:
                             stats["files_with_findings"] += 1
+                            
+                            # Create preview of content for analysis
+                            content_preview = content[:self.content_preview_length]
+                            if len(content) > self.content_preview_length:
+                                content_preview += "..."
+                                
                             findings.append({
                                 "file": expanded_path,
                                 "type": "config_file",
                                 "pattern_matches": pattern_matches,
-                                "content_preview": content[:500] + "..." if len(content) > 500 else content
+                                "content_preview": content_preview
                             })
                 else:
                     stats["file_not_found"] += 1
@@ -109,16 +146,31 @@ class DotfileScanner:
         return findings
     
     def _safe_read_file(self, file_path: str, stats: Dict[str, int]) -> str:
-        """Safely read file content with proper error handling and logging"""
-        try:
-            # Check file size to prevent reading huge files
-            file_size = os.path.getsize(file_path)
-            max_size = 10 * 1024 * 1024  # 10MB limit
+        """
+        Safely read file content with proper error handling and size limits.
+        
+        This method includes multiple safety measures:
+        - File size checking to prevent memory exhaustion
+        - Encoding detection and fallbacks
+        - Proper error categorization for statistics
+        - Timeout protection via size limits
+        
+        Args:
+            file_path: Path to the file to read
+            stats: Statistics dictionary to update with error counts
             
-            if file_size > max_size:
+        Returns:
+            File content as string, or empty string if reading fails
+        """
+        try:
+            # Check file size to prevent reading huge files that could exhaust memory
+            file_size = os.path.getsize(file_path)
+            
+            if file_size > self.max_file_size_bytes:
                 self.logger.warning(f"File too large ({file_size} bytes), skipping: {file_path}")
                 return ""
             
+            # Primary attempt with UTF-8 encoding
             with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                 return f.read()
                 
@@ -133,7 +185,7 @@ class DotfileScanner:
         except UnicodeDecodeError:
             stats["decode_errors"] += 1
             self.logger.debug(f"Unicode decode error: {file_path}")
-            # Try with different encoding
+            # Try with Latin-1 encoding as fallback for files with mixed encoding
             try:
                 with open(file_path, 'r', encoding='latin-1', errors='ignore') as f:
                     return f.read()
@@ -145,17 +197,29 @@ class DotfileScanner:
             return ""
     
     def _scan_env_files(self, stats: Dict[str, int]) -> List[Dict[str, Any]]:
-        """Scan .env files"""
+        """
+        Scan environment files (.env) for credentials.
+        
+        Environment files often contain API keys, database passwords, and other
+        sensitive configuration data. This method searches common locations
+        where .env files are typically stored.
+        
+        Args:
+            stats: Statistics dictionary to update during scanning
+            
+        Returns:
+            List of .env files containing credential patterns
+        """
         findings = []
         
-        # Common .env file locations
-        env_patterns = [
+        # Get env file patterns from config (prefer config over hardcoded)
+        env_patterns = self.scan_paths.get("env_file_patterns", [
             "~/.env*",
             "~/.config/*/.env*",
             "~/.local/share/*/.env*",
             "~/projects/*/.env*",
             "~/workspace/*/.env*"
-        ]
+        ])
         
         for pattern in env_patterns:
             try:
@@ -171,11 +235,17 @@ class DotfileScanner:
                             env_vars = self._parse_env_file(content)
                             if env_vars:
                                 stats["files_with_findings"] += 1
+                                
+                                # Create content preview
+                                content_preview = content[:self.content_preview_length]
+                                if len(content) > self.content_preview_length:
+                                    content_preview += "..."
+                                
                                 findings.append({
                                     "file": file_path,
                                     "type": "env_file",
                                     "variables": env_vars,
-                                    "content_preview": content[:500] + "..." if len(content) > 500 else content
+                                    "content_preview": content_preview
                                 })
                                 
             except Exception as e:
@@ -185,14 +255,27 @@ class DotfileScanner:
         return findings
     
     def _scan_git_configs(self, stats: Dict[str, int]) -> List[Dict[str, Any]]:
-        """Scan Git configurations"""
+        """
+        Scan Git configuration files for credentials.
+        
+        Git configurations can contain embedded credentials in URLs,
+        credential helpers, and other settings. This is particularly
+        valuable for finding repository access tokens and passwords.
+        
+        Args:
+            stats: Statistics dictionary to update during scanning
+            
+        Returns:
+            List of Git config files containing credential information
+        """
         findings = []
         
-        git_paths = [
+        # Get git config paths from config (prefer config over hardcoded)
+        git_paths = self.scan_paths.get("git_config_paths", [
             "~/.git-credentials",
             "~/.gitconfig",
             "~/.config/git/config"
-        ]
+        ])
         
         for git_path in git_paths:
             try:
@@ -425,8 +508,20 @@ class DotfileScanner:
         
         return matches
     
-    def _get_context(self, content: str, match: str, context_size: int = 50) -> str:
-        """Get context around a match"""
+    def _get_context(self, content: str, match: str) -> str:
+        """
+        Get context around a pattern match for better analysis.
+        
+        Context helps analysts understand how credentials are used and
+        determine if they are legitimate findings or false positives.
+        
+        Args:
+            content: Full content text
+            match: The matched credential string (can be string or tuple)
+            
+        Returns:
+            Context string with surrounding text
+        """
         try:
             # Handle different match types from regex findall
             if isinstance(match, tuple):
@@ -440,11 +535,11 @@ class DotfileScanner:
             if match_str:
                 start = content.find(match_str)
                 if start != -1:
-                    start = max(0, start - context_size)
-                    end = min(len(content), start + len(match_str) + context_size * 2)
+                    start = max(0, start - self.context_size)
+                    end = min(len(content), start + len(match_str) + self.context_size * 2)
                     return content[start:end]
-        except Exception as e:
-            # Log the error for debugging but don't fail
+        except Exception:
+            # Fail silently for context extraction - not critical
             pass
         return ""
     
