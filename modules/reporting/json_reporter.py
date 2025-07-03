@@ -126,7 +126,13 @@ class JsonReporter:
         
         for module_name, module_data in results.items():
             try:
-                processed_findings[module_name] = self._process_module_findings(module_name, module_data)
+                module_result = self._process_module_findings(module_name, module_data)
+                
+                # Only include modules that have actual findings or errors
+                if (module_result.get("status") == "error" or 
+                    (module_result.get("findings") and len(module_result["findings"]) > 0)):
+                    processed_findings[module_name] = module_result
+                    
             except Exception as e:
                 processed_findings[module_name] = {
                     "status": "error",
@@ -164,6 +170,8 @@ class JsonReporter:
             findings = self._categorize_dotfile_findings(module_data)
         elif module_name == "file_grep":
             findings = self._categorize_file_grep_findings(module_data)
+        elif module_name == "git":
+            findings = self._categorize_git_findings(module_data)
         else:
             # Generic processing for unknown modules
             findings = self._categorize_generic_findings(module_data)
@@ -328,7 +336,7 @@ class JsonReporter:
                                 "pattern_matches": file_entry.get('pattern_matches', [])
                             },
                             "risk_score": 5,
-                            "remediation": "Move credentials to secure configuration management"
+                            "remediation": self._get_remediation_message("dotfile_credential")
                         })
         
         return findings
@@ -340,20 +348,254 @@ class JsonReporter:
         file_matches = file_grep_data.get('file_matches', [])
         for match in file_matches:
             if isinstance(match, dict):
-                findings.append({
-                    "type": "file_pattern_match",
-                    "severity": "warning",
-                    "category": "potential_credential",
-                    "details": {
-                        "file": match.get('file', 'Unknown'),
-                        "pattern_matches": match.get('pattern_matches', []),
-                        "file_size_bytes": match.get('file_size', 0)
-                    },
-                    "risk_score": 4,
-                    "remediation": "Review file contents and secure any credentials found"
-                })
+                # Filter out false positives from pattern matches
+                filtered_matches = self._filter_false_positive_matches(match.get('pattern_matches', []))
+                
+                if filtered_matches:  # Only create finding if there are real matches
+                    findings.append({
+                        "type": "file_pattern_match",
+                        "severity": "warning",
+                        "category": "potential_credential",
+                        "details": {
+                            "file": match.get('file', 'Unknown'),
+                            "pattern_matches": filtered_matches,
+                            "file_size_bytes": match.get('file_size', 0)
+                        },
+                        "risk_score": 4,
+                        "remediation": self._get_remediation_message("file_pattern_match")
+                    })
         
         return findings
+    
+    def _categorize_git_findings(self, git_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Categorize git findings - only actual credential discoveries, not repository metadata."""
+        findings = []
+        
+        # Process commit history findings (actual credentials found in commits)
+        commit_history = git_data.get('commit_history', [])
+        for commit_finding in commit_history:
+            if isinstance(commit_finding, dict) and commit_finding.get('matches'):
+                # Filter out obvious false positives
+                filtered_matches = self._filter_false_positive_matches(commit_finding.get('matches', []))
+                
+                if filtered_matches:  # Only create finding if there are real matches
+                    findings.append({
+                        "type": "git_commit_credential",
+                        "severity": "critical",
+                        "category": "version_control_credential",
+                        "details": {
+                            "repository": commit_finding.get('repository', 'Unknown'),
+                            "commit_hash": commit_finding.get('commit', {}).get('hash', 'Unknown'),
+                            "commit_message": commit_finding.get('commit', {}).get('message', 'Unknown'),
+                            "author": commit_finding.get('commit', {}).get('author', 'Unknown'),
+                            "date": commit_finding.get('commit', {}).get('date', 'Unknown'),
+                            "pattern_matches": filtered_matches
+                        },
+                        "risk_score": 9,
+                        "remediation": self._get_remediation_message("git_commit_credential")
+                    })
+        
+        # Process git config credentials
+        config_credentials = git_data.get('config_credentials', [])
+        for config_finding in config_credentials:
+            if isinstance(config_finding, dict) and config_finding.get('matches'):
+                filtered_matches = self._filter_false_positive_matches(config_finding.get('matches', []))
+                
+                if filtered_matches:
+                    findings.append({
+                        "type": "git_config_credential",
+                        "severity": "critical",
+                        "category": "configuration_credential",
+                        "details": {
+                            "repository": config_finding.get('repository', 'Unknown'),
+                            "config_file": config_finding.get('config_file', 'Unknown'),
+                            "config_type": config_finding.get('type', 'Unknown'),
+                            "pattern_matches": filtered_matches
+                        },
+                        "risk_score": 8,
+                        "remediation": self._get_remediation_message("git_config_credential")
+                    })
+        
+        # Process remote URLs with embedded credentials
+        remote_urls = git_data.get('remote_urls', [])
+        for remote_finding in remote_urls:
+            if isinstance(remote_finding, dict):
+                findings.append({
+                    "type": "git_remote_credential",
+                    "severity": "critical",
+                    "category": "url_credential",
+                    "details": {
+                        "repository": remote_finding.get('repository', 'Unknown'),
+                        "remote_name": remote_finding.get('remote_name', 'Unknown'),
+                        "url": remote_finding.get('url', 'Unknown'),
+                        "credential_type": remote_finding.get('credential_type', 'Unknown')
+                    },
+                    "risk_score": 9,
+                    "remediation": self._get_remediation_message("git_remote_credential")
+                })
+        
+        # Process sensitive files with credential content
+        sensitive_files = git_data.get('sensitive_files', [])
+        for file_finding in sensitive_files:
+            if isinstance(file_finding, dict) and file_finding.get('content_matches'):
+                filtered_matches = self._filter_false_positive_matches(file_finding.get('content_matches', []))
+                
+                if filtered_matches:
+                    findings.append({
+                        "type": "git_sensitive_file",
+                        "severity": "warning",
+                        "category": "file_credential",
+                        "details": {
+                            "repository": file_finding.get('repository', 'Unknown'),
+                            "file_path": file_finding.get('file_path', 'Unknown'),
+                            "exists": file_finding.get('exists', False),
+                            "pattern_matched": file_finding.get('pattern_matched', 'Unknown'),
+                            "content_matches": filtered_matches
+                        },
+                        "risk_score": 6,
+                        "remediation": self._get_remediation_message("git_sensitive_file")
+                    })
+        
+        # Process recently deleted files (potential credential cleanup attempts)
+        recent_deletions = git_data.get('recent_deletions', [])
+        for deletion_finding in recent_deletions:
+            if isinstance(deletion_finding, dict):
+                findings.append({
+                    "type": "git_deleted_credential",
+                    "severity": "info",
+                    "category": "historical_credential",
+                    "details": {
+                        "repository": deletion_finding.get('repository', 'Unknown'),
+                        "deleted_file": deletion_finding.get('deleted_file', 'Unknown'),
+                        "commit_info": deletion_finding.get('commit_info', {}),
+                        "pattern_matched": deletion_finding.get('pattern_matched', 'Unknown')
+                    },
+                    "risk_score": 4,
+                    "remediation": self._get_remediation_message("git_deleted_credential")
+                })
+        
+        # NOTE: We explicitly do NOT include 'repositories' data as findings
+        # That's just metadata about discovered repositories, not credential findings
+        
+        return findings
+    
+    def _filter_false_positive_matches(self, matches: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Filter out obvious false positives from pattern matches."""
+        if not matches:
+            return []
+        
+        filtered_matches = []
+        
+        for match in matches:
+            if not isinstance(match, dict):
+                continue
+                
+            match_text = match.get('match', '').lower()
+            context = match.get('context', '').lower()
+            pattern_type = match.get('pattern_type', '')
+            
+            # Skip obvious false positives
+            if self._is_false_positive_match(match_text, context, pattern_type):
+                continue
+                
+            filtered_matches.append(match)
+        
+        return filtered_matches
+    
+    def _is_false_positive_match(self, match_text: str, context: str, pattern_type: str) -> bool:
+        """Check if a match is likely a false positive."""
+        
+        # Get patterns from config
+        false_positive_filters = self.config.get('reporting', {}).get('false_positive_filters', {})
+        
+        programming_patterns = false_positive_filters.get('programming_patterns', [])
+        dotnet_patterns = false_positive_filters.get('dotnet_patterns', [])
+        comment_patterns = false_positive_filters.get('comment_patterns', [])
+        test_patterns = false_positive_filters.get('test_patterns', [])
+        path_patterns = false_positive_filters.get('path_patterns', [])
+        git_diff_patterns = false_positive_filters.get('git_diff_patterns', [])
+        config_regex_patterns = false_positive_filters.get('config_regex_patterns', [])
+        doc_patterns = false_positive_filters.get('documentation_patterns', [])
+        env_doc_patterns = false_positive_filters.get('env_documentation_patterns', [])
+        library_api_patterns = false_positive_filters.get('library_api_patterns', [])
+        vendor_dependency_patterns = false_positive_filters.get('vendor_dependency_patterns', [])
+        
+        # Check if match contains any false positive patterns
+        all_patterns = (programming_patterns + dotnet_patterns + comment_patterns + 
+                       test_patterns + path_patterns + git_diff_patterns + 
+                       config_regex_patterns + doc_patterns + env_doc_patterns +
+                       library_api_patterns + vendor_dependency_patterns)
+        
+        for pattern in all_patterns:
+            if pattern in match_text or pattern in context:
+                return True
+        
+        # Special checks for database URLs that are just regex patterns
+        if pattern_type == 'database_urls':
+            if any(x in match_text for x in ['[^\\s', '^\\s', ']\\"', '\"+', '\"],', '\",', '\\" ]']):
+                return True
+            if 'user:pass@host/db' in match_text:
+                return True
+            # Check if this is a regex pattern in config files
+            if any(x in context for x in ['url_credential_patterns', '"^', '\\"^', 'config.json']):
+                return True
+            # Check for regex escape patterns
+            if '\\\\s' in match_text or '\\\\' in match_text:
+                return True
+        
+        # Special checks for private key patterns that are just comments or partial matches
+        if pattern_type == 'private_keys':
+            if any(x in context for x in ['# -*-', 'signature primitive', 'written in', 'copyright', ':parameters:']):
+                return True
+            # Empty matches or just spaces/punctuation
+            if not match_text.strip() or match_text.strip().lower() in ['rsa ', 'dsa ', 'ec ', 'openssh ', 'rsa', 'dsa', 'ec', 'openssh']:
+                return True
+            # Code that mentions key types but isn't actual keys
+            if any(x in context for x in ['return pem.encode', 'key object', 'if a private']):
+                return True
+        
+        # Check for environment variable patterns that are just function parameters or documentation
+        if pattern_type == 'environment_vars':
+            if any(x in match_text for x in ['=self.', '=args.', '(', ')', ',', '"', "'", 'backend=', 'frozenset']):
+                return True
+            # Documentation patterns
+            if 'python_keyring_backend=' in match_text.lower() and '``' in context:
+                return True
+        
+        # Password patterns that are just user prompts or documentation
+        if pattern_type == 'passwords':
+            if any(x in match_text for x in ['getpass(\"', 'password:\")', 'new password:', 'current password:', 'retype']):
+                return True
+            if any(x in context for x in ['getpass', 'import getpass', 'logging.', 'try:', 'except:']):
+                return True
+            # Documentation patterns
+            if any(x in context for x in ['.md\'', 'password.md', 'get-', 'set-', 'privesc/']):
+                return True
+            # Standard attribute names and certificate OIDs
+            if any(x in match_text.lower() for x in ['challenge_password', 'challengepassword']):
+                return True
+            if any(x in context for x in ['attributeoid', 'oid.', 'certificate', 'x509']):
+                return True
+            # String formatting templates (Python, Go, etc.)
+            if any(x in match_text for x in ['%s', '{0}', '{1}', '{2}', '{3}', '{4}']):
+                return True
+            if any(x in context for x in ['.format(', '% (', 'hexlify(', '.decode(', 'secretsdump']):
+                return True
+        
+        # AWS keys that are clearly examples
+        if pattern_type == 'aws_keys':
+            if 'example' in match_text or 'akiaiosfodnn7example' in match_text:
+                return True
+        
+        # Check for vendor/dependency files and CI files in context
+        if any(x in context.lower() for x in ['vendor/', '.travis.yml', 'appveyor.yml', 'github.com/', 'node_modules/', 'site-packages/']):
+            return True
+            
+        # Check for library/API files that handle credentials but don't contain them
+        if any(x in context.lower() for x in ['credentials.go', 'credentials_info.go', 'impacket/examples/', 'secretsdump.py']):
+            return True
+        
+        return False
     
     def _categorize_generic_findings(self, module_data: Any) -> List[Dict[str, Any]]:
         """Generic categorization for unknown module types."""
@@ -479,23 +721,30 @@ class JsonReporter:
     
     def _map_risk_to_severity(self, risk_level: str) -> str:
         """Map risk level to severity."""
-        risk_mapping = {
+        risk_mappings = self.config.get('reporting', {}).get('risk_mappings', {})
+        severity_mapping = risk_mappings.get('severity_mapping', {
             'critical': 'critical',
             'high': 'critical', 
             'medium': 'warning',
             'low': 'info'
-        }
-        return risk_mapping.get(risk_level.lower(), 'info')
+        })
+        return severity_mapping.get(risk_level.lower(), 'info')
     
     def _calculate_risk_score(self, risk_level: str) -> int:
         """Calculate numerical risk score."""
-        score_mapping = {
+        risk_mappings = self.config.get('reporting', {}).get('risk_mappings', {})
+        risk_scores = risk_mappings.get('risk_scores', {
             'critical': 9,
             'high': 7,
             'medium': 5,
             'low': 3
-        }
-        return score_mapping.get(risk_level.lower(), 3)
+        })
+        return risk_scores.get(risk_level.lower(), 3)
+
+    def _get_remediation_message(self, finding_type: str) -> str:
+        """Get remediation message from config."""
+        remediation_messages = self.config.get('reporting', {}).get('remediation_messages', {})
+        return remediation_messages.get(finding_type, "Review finding for potential security implications")
     
     def _json_serializer(self, obj):
         """Custom JSON serializer for non-standard types."""

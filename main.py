@@ -21,6 +21,7 @@ from modules.keyring_dump import KeyringDump
 from modules.file_grepper import FileGrepper
 from modules.dotfile_scanner import DotfileScanner
 from modules.history_parser import HistoryParser
+from modules.git_scanner import GitScanner
 from modules.reporting import ReportOrchestrator
 from modules.utils.logger import Logger, get_logger
 from modules.utils.config_loader import ConfigLoader
@@ -66,7 +67,8 @@ class ModuleRunner:
             'history': {'class': HistoryParser, 'method': 'parse'},
             'browser': {'class': BrowserExtractor, 'method': 'extract_all'},
             'file_grep': {'class': FileGrepper, 'method': 'scan'},
-            'keyring': {'class': KeyringDump, 'method': 'extract_credentials'}
+            'keyring': {'class': KeyringDump, 'method': 'extract_credentials'},
+            'git': {'class': GitScanner, 'method': 'scan'}
         }
         
     def run_module_safe(self, module_name: str) -> ModuleResult:
@@ -220,9 +222,23 @@ class CredFinder:
             'module_details': {}
         }
         
+        # Check if we should include execution data
+        include_execution_data = self.config.get("output", {}).get("include_execution_data", True)
+        
         for module_name, result in module_results.items():
-            # Save statistics
-            self.execution_stats['module_details'][module_name] = result.to_dict()
+            # Save statistics (with or without raw data)
+            if include_execution_data:
+                self.execution_stats['module_details'][module_name] = result.to_dict()
+            else:
+                # Only include basic stats, not the full data
+                self.execution_stats['module_details'][module_name] = {
+                    'module_name': result.module_name,
+                    'status': result.status,
+                    'error': result.error,
+                    'execution_time': result.execution_time,
+                    'timestamp': result.timestamp.isoformat()
+                }
+            
             self.execution_stats['total_execution_time'] += result.execution_time
             
             if result.status == 'success':
@@ -268,7 +284,7 @@ Examples:
     # Module selection
     parser.add_argument("--all", action="store_true", help="Run all available modules")
     parser.add_argument("--modules", nargs='+', 
-                       choices=['ssh', 'browser', 'keyring', 'file_grep', 'dotfiles', 'history'],
+                       choices=['ssh', 'browser', 'keyring', 'file_grep', 'dotfiles', 'history', 'git'],
                        help="Specific modules to run")
     parser.add_argument("--fast-only", action="store_true", 
                        help="Run only fast modules (ssh, dotfiles, history)")
@@ -314,9 +330,9 @@ Examples:
     
     # Determine which modules to run
     if args.all:
-        modules_to_run = ['ssh', 'browser', 'keyring', 'file_grep', 'dotfiles', 'history']
+        modules_to_run = ['ssh', 'browser', 'keyring', 'file_grep', 'dotfiles', 'history', 'git']
     elif args.fast_only:
-        modules_to_run = ['ssh', 'dotfiles', 'history']
+        modules_to_run = ['ssh', 'dotfiles', 'history', 'git']
     elif args.modules:
         modules_to_run = args.modules
     else:

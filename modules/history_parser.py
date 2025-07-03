@@ -98,13 +98,16 @@ class HistoryParser:
                             continue
                             
                         pattern_matches = self._check_patterns(line)
-                        if pattern_matches:
+                        # Filter out obvious false positives
+                        filtered_matches = [m for m in pattern_matches if not self._is_false_positive_command(line, m)]
+                        
+                        if filtered_matches:
                             findings.append({
                                 "file": path,
                                 "line_number": idx + 1,
                                 "command": line,
-                                "pattern_matches": pattern_matches,
-                                "risk_level": self._assess_risk_level(pattern_matches)
+                                "pattern_matches": filtered_matches,
+                                "risk_level": self._assess_risk_level(filtered_matches)
                             })
                             
                 except PermissionError:
@@ -124,13 +127,16 @@ class HistoryParser:
                             if not line or line.startswith('#'):
                                 continue
                             pattern_matches = self._check_patterns(line)
-                            if pattern_matches:
+                            # Filter out obvious false positives
+                            filtered_matches = [m for m in pattern_matches if not self._is_false_positive_command(line, m)]
+                            
+                            if filtered_matches:
                                 findings.append({
                                     "file": path,
                                     "line_number": idx + 1,
                                     "command": line,
-                                    "pattern_matches": pattern_matches,
-                                    "risk_level": self._assess_risk_level(pattern_matches)
+                                    "pattern_matches": filtered_matches,
+                                    "risk_level": self._assess_risk_level(filtered_matches)
                                 })
                     except Exception as e:
                         self.logger.warning(f"Failed to read history file {path} with fallback encoding: {e}")
@@ -290,4 +296,76 @@ class HistoryParser:
                 return "medium"
         
         # Default to low risk for any other patterns
-        return "low" 
+        return "low"
+    
+    def _is_false_positive_command(self, command: str, match: Dict[str, Any]) -> bool:
+        """
+        Check if a command/match combination is likely a false positive.
+        
+        Args:
+            command: The full command line
+            match: The pattern match dictionary
+            
+        Returns:
+            True if this is likely a false positive
+        """
+        command_lower = command.lower()
+        match_text = match.get('match', '').lower()
+        pattern_type = match.get('type', '')
+        
+        # Filter out common false positives
+        false_positive_indicators = [
+            # Package installations and testing
+            'install --without test',
+            'bundle install',
+            'npm test',
+            'go install',
+            'pip install',
+            'apt install',
+            'yum install',
+            
+            # URLs and examples
+            'example.com',
+            'localhost',
+            '127.0.0.1',
+            'github.com/',
+            'latest',
+            
+            # Common test patterns
+            'testing',
+            'test_',
+            '_test',
+            '.test',
+            'example',
+            'demo',
+            'sample',
+            
+            # Backslash continuations (shell syntax)
+            '\\\\',
+            
+            # Version numbers and releases  
+            'release',
+            'ubuntu',
+            'latest',
+            'v7.2',
+            '+ubuntu',
+        ]
+        
+        # Check if command contains any false positive indicators
+        for indicator in false_positive_indicators:
+            if indicator in command_lower:
+                return True
+        
+        # Pattern-specific false positive checks
+        if pattern_type == 'false_positive_filters':
+            return True
+            
+        # Check for overly common patterns that are likely noise
+        if match_text in ['\\\\', 'test', 'example', 'latest']:
+            return True
+            
+        # Filter out very short matches (likely fragments)
+        if len(match_text.strip()) < 4:
+            return True
+            
+        return False 

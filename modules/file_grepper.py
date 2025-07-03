@@ -35,6 +35,13 @@ class FileGrepper:
         self.scan_paths = config.get("scan_paths", {})
         self.logger = get_logger("credfinder.filegrepper")
         
+        # Load exclusion settings
+        self.exclusions = config.get("exclusions", {})
+        self.excluded_dirs = set(self.exclusions.get("directories", []))
+        self.excluded_file_patterns = self.exclusions.get("file_patterns", [])
+        self.excluded_path_patterns = self.exclusions.get("path_patterns", [])
+
+        
         # Load file grep settings from config to avoid hardcoded values
         self.grep_settings = config.get("module_settings", {}).get("file_grep", {})
         
@@ -138,6 +145,10 @@ class FileGrepper:
                         files = list(dict.fromkeys(files))
                         # Limit files per pattern to prevent excessive processing
                         for file_path in files[:self.max_files_per_pattern]:
+                            # Skip excluded files
+                            if self._should_exclude_path(file_path):
+                                continue
+                                
                             # Apply size filter to avoid reading huge files
                             if (os.path.isfile(file_path) and 
                                 os.path.getsize(file_path) < self.max_file_size_bytes):
@@ -275,6 +286,10 @@ class FileGrepper:
                 # Limit files per pattern to prevent excessive processing
                 for file_path in files[:self.max_files_common_location]:
                     if os.path.isfile(file_path):
+                        # Skip excluded files
+                        if self._should_exclude_path(file_path):
+                            continue
+                        
                         try:
                             # Skip binary files to improve performance and accuracy
                             if self._is_binary_file(file_path):
@@ -460,4 +475,41 @@ class FileGrepper:
         elif 'Desktop' in file_path:
             return "desktop"
         else:
-            return "other" 
+            return "other"
+    
+    def _should_exclude_path(self, path: str) -> bool:
+        """
+        Check if a path should be excluded based on exclusion rules.
+        
+        Args:
+            path: Path to check for exclusions
+            
+        Returns:
+            True if path should be excluded
+        """
+        import fnmatch
+        
+        # Normalize path for consistent checking
+        normalized_path = os.path.normpath(path)
+        path_parts = normalized_path.split(os.sep)
+        
+        # Check directory exclusions
+        for part in path_parts:
+            if part in self.excluded_dirs:
+                return True
+        
+        # Check path pattern exclusions
+        for pattern in self.excluded_path_patterns:
+            if fnmatch.fnmatch(normalized_path, pattern) or fnmatch.fnmatch(path, pattern):
+                return True
+        
+        # Check file pattern exclusions for files
+        if os.path.isfile(path):
+            filename = os.path.basename(path)
+            for pattern in self.excluded_file_patterns:
+                if fnmatch.fnmatch(filename, pattern):
+                    return True
+        
+        return False
+    
+ 
