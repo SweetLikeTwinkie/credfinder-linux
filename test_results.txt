@@ -1,0 +1,259 @@
+
+=== Starting Test Suite ===
+
+
+==================== Running test_territory_ownership ====================
+
+=== Testing Module Territory Ownership ===
+
+Cache reset completed
+✅ PASS: dotfile_scanner can scan ~/.env
+
+=== Test Results: 1 passed, 0 failed ===
+
+✅ test_territory_ownership PASSED
+============================================================
+
+
+==================== Running test_pattern_ownership ====================
+
+=== Testing Pattern Ownership ===
+
+Cache reset completed
+
+Testing dotfile_scanner:
+  Expected patterns: ['credentials', 'environment_vars']
+  Actual patterns: ['credentials', 'environment_vars']
+  Missing patterns: []
+  Extra patterns: []
+✅ PASS: dotfile_scanner has correct patterns
+
+Testing file_grepper:
+  Expected patterns: ['api_tokens', 'credentials', 'database_urls', 'environment_vars', 'jwt_tokens', 'passwords']
+  Actual patterns: ['api_tokens', 'credentials', 'database_urls', 'environment_vars', 'jwt_tokens', 'passwords']
+  Missing patterns: []
+  Extra patterns: []
+✅ PASS: file_grepper has correct patterns
+
+Testing git_scanner:
+  Expected patterns: ['aws_keys', 'credentials', 'database_urls', 'environment_vars', 'private_keys']
+  Actual patterns: ['aws_keys', 'credentials', 'database_urls', 'environment_vars', 'private_keys']
+  Missing patterns: []
+  Extra patterns: []
+✅ PASS: git_scanner has correct patterns
+
+Testing history_parser:
+  Expected patterns: ['api_tokens', 'aws_keys', 'credentials', 'environment_vars', 'jwt_tokens', 'passwords']
+  Actual patterns: ['api_tokens', 'aws_keys', 'credentials', 'environment_vars', 'jwt_tokens', 'passwords']
+  Missing patterns: []
+  Extra patterns: []
+✅ PASS: history_parser has correct patterns
+
+Testing ssh_scanner:
+  Expected patterns: ['private_keys']
+  Actual patterns: ['private_keys']
+  Missing patterns: []
+  Extra patterns: []
+✅ PASS: ssh_scanner has correct patterns
+
+=== Test Results: 5 passed, 0 failed ===
+
+✅ test_pattern_ownership PASSED
+============================================================
+
+
+==================== Running test_cache_functionality ====================
+
+=== Testing Cache Functionality ===
+
+Cache reset completed
+✅ PASS: File content correctly cached and retrieved for test_aws_keys.txt
+✅ PASS: Cache hit recorded for test_aws_keys.txt
+  Cache hit rate: 50.0%
+✅ PASS: File content correctly cached and retrieved for test_env_file.env
+✅ PASS: Cache hit recorded for test_env_file.env
+  Cache hit rate: 50.0%
+✅ PASS: File content correctly cached and retrieved for test_config.yml
+✅ PASS: Cache hit recorded for test_config.yml
+  Cache hit rate: 50.0%
+
+=== Test Results: 6 passed, 0 failed ===
+
+✅ test_cache_functionality PASSED
+============================================================
+
+
+==================== Running test_error_handling ====================
+
+=== Testing Error Handling ===
+
+Cache reset completed
+Error reading file /path/to/non_existent_file.txt: File not found: /path/to/non_existent_file.txt
+✅ PASS: non_existent_file.txt - Correctly raised FileNotFoundError
+Error reading file /root/restricted.txt: File not found: /root/restricted.txt
+✅ PASS: /root/restricted.txt - Correctly raised FileNotFoundError
+Error checking module territory for invalid_module on /tmp/test.txt: Invalid module name: invalid_module
+✅ PASS: invalid_module - Correctly raised ValueError
+Error reading file : Invalid file path
+✅ PASS: empty_path - Correctly raised ValueError
+Error reading file None: Invalid file path
+✅ PASS: none_path - Correctly raised ValueError
+Error reading file /tmp: Cannot read directory: /tmp
+✅ PASS: directory_path - Correctly raised IsADirectoryError
+
+=== Test Results: 6 passed, 0 failed ===
+
+✅ test_error_handling PASSED
+============================================================
+
+
+==================== Running test_concurrent_scanning ====================
+
+=== Testing Concurrent Scanning ===
+
+Cache reset completed
+✅ PASS: Concurrent file scanning produced correct results
+
+✅ test_concurrent_scanning PASSED
+============================================================
+
+
+==================== Running test_memory_limits ====================
+
+=== Testing Memory Usage Limits ===
+
+Cache reset completed
+Error reading file /tmp/large_test_file.txt: File too large (>10485760 bytes): /tmp/large_test_file.txt
+✅ PASS: Correctly rejected large file
+✅ PASS: Successfully cached many files
+
+=== Test Results: 2 passed, 0 failed ===
+
+✅ test_memory_limits PASSED
+============================================================
+
+
+==================== Running test_pattern_edge_cases ====================
+
+=== Testing Pattern Edge Cases ===
+
+Cache reset completed
+Error checking module territory for file_grepper on : Invalid module name or file path
+✅ PASS: file_grepper correctly rejected empty path
+✅ PASS: file_grepper correctly allowed /a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/test.txt
+✅ PASS: file_grepper correctly allowed /tmp/测试/test.txt
+✅ PASS: dotfile_scanner correctly allowed /tmp/🔑/secrets.env
+✅ PASS: file_grepper correctly allowed /tmp/test!@#$%^&*()_+-=.txt
+✅ PASS: file_grepper correctly rejected ../../../etc/passwd
+✅ PASS: dotfile_scanner correctly allowed /tmp/test.tar.gz.env
+✅ PASS: dotfile_scanner correctly allowed ~/.hidden/.secret/.env
+✅ PASS: dotfile_scanner correctly allowed ~/.ENV
+✅ PASS: file_grepper correctly allowed ~/Projects/API_KEYS.txt
+
+=== Test Results: 10 passed, 0 failed ===
+
+✅ test_pattern_edge_cases PASSED
+============================================================
+
+
+==================== Running test_filesystem_edge_cases ====================
+
+=== Testing File System Edge Cases ===
+
+Cache reset completed
+✅ PASS: Successfully read symlink.txt
+Error reading file /tmp/tmpqeyv3811/broken.txt: File not found: /tmp/tmpqeyv3811/broken.txt
+✅ PASS: Correctly handled error for broken.txt
+Error reading file /tmp/tmpqeyv3811/circular1: File not found: /tmp/tmpqeyv3811/circular1
+✅ PASS: Correctly handled error for circular1
+Error reading file /dev/null: Cannot read device file: /dev/null
+✅ PASS: Correctly handled error for null
+Error reading file /tmp/tmpqeyv3811/pipe: Cannot read pipe file: /tmp/tmpqeyv3811/pipe
+✅ PASS: Correctly handled error for pipe
+
+=== Test Results: 5 passed, 0 failed ===
+
+✅ test_filesystem_edge_cases PASSED
+============================================================
+
+
+==================== Running test_config_validation ====================
+
+=== Testing Configuration Validation ===
+
+Config missing required sections: ['modules', 'scan_paths', 'patterns']
+Config validation error: Missing required sections: ['modules', 'scan_paths', 'patterns']
+Could not read config file /tmp/test_config.json: Missing required sections: ['modules', 'scan_paths', 'patterns']
+Could not read config file /tmp/test_config.json: Missing required sections: ['modules', 'scan_paths', 'patterns']
+✅ PASS: Invalid config correctly rejected
+Config missing required sections: ['modules', 'scan_paths']
+Config validation error: Missing required sections: ['modules', 'scan_paths']
+Could not read config file /tmp/test_config.json: Missing required sections: ['modules', 'scan_paths']
+Could not read config file /tmp/test_config.json: Missing required sections: ['modules', 'scan_paths']
+✅ PASS: Invalid config correctly rejected
+Config missing required sections: ['modules', 'scan_paths']
+Config validation error: Missing required sections: ['modules', 'scan_paths']
+Could not read config file /tmp/test_config.json: Missing required sections: ['modules', 'scan_paths']
+Could not read config file /tmp/test_config.json: Missing required sections: ['modules', 'scan_paths']
+✅ PASS: Invalid config correctly rejected
+✅ PASS: Valid config accepted
+✅ PASS: Valid config accepted
+
+=== Test Results: 5 passed, 0 failed ===
+
+✅ test_config_validation PASSED
+============================================================
+
+
+==================== Running test_module_coordination ====================
+
+=== Testing Module Coordination ===
+
+Cache reset completed
+✅ PASS: git_scanner correctly scanned .env
+✅ PASS: dotfile_scanner correctly scanned .env
+✅ PASS: file_grepper correctly ignored .env
+✅ PASS: git_scanner correctly ignored package.json
+✅ PASS: dotfile_scanner correctly ignored package.json
+✅ PASS: file_grepper correctly ignored package.json
+✅ PASS: git_scanner correctly ignored config.json
+✅ PASS: dotfile_scanner correctly ignored config.json
+✅ PASS: file_grepper correctly scanned config.json
+
+=== Test Results: 9 passed, 0 failed ===
+
+✅ test_module_coordination PASSED
+============================================================
+
+
+==================== Running test_single_case ====================
+
+=== Testing Single Case Scenario ===
+
+Cache reset completed
+✅ PASS: dotfile_scanner can scan the file
+✅ PASS: dotfile_scanner has correct patterns
+  Patterns: ['credentials', 'environment_vars']
+✅ PASS: file_grepper can scan the file
+✅ PASS: file_grepper has correct patterns
+  Patterns: ['api_tokens', 'credentials', 'database_urls', 'environment_vars', 'jwt_tokens', 'passwords']
+✅ PASS: git_scanner cannot scan the file
+✅ PASS: ssh_scanner cannot scan the file
+✅ PASS: File content correctly cached and retrieved
+✅ PASS: Cache hit recorded
+  Cache hit rate: 50.0%
+
+=== Test Results: 8 passed, 0 failed ===
+
+✅ test_single_case PASSED
+============================================================
+
+
+=== Final Test Results ===
+Total tests run: 11
+Tests passed:    11
+Tests failed:    0
+Success rate:    100.0%
+
+==============================
+
